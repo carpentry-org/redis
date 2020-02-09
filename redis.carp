@@ -12,7 +12,8 @@
 (defmodule RESP
   (use-all Array Int Maybe Pattern Result)
 
-  (def separator "\r\n")
+  (hidden c)
+  (private c)
   (def c (prn &@&[@""]))
 
   (defn str [r]
@@ -23,6 +24,8 @@
       (Integer i) (fmt ":%d\r\n" i)
       (Arr a) (fmt "*%d\r\n%s" (length &a) &(concat &a))))
 
+  (hidden decode-bulk-string)
+  (private decode-bulk-string)
   (defn decode-bulk-string [s]
     (if (starts-with? s "-1\r\n")
       (Success (Null))
@@ -34,17 +37,22 @@
             (String.prefix-string &(join "\r\n" &(suffix-array &splt 1))
                                   (from-string l))))))))
 
+  (hidden agg)
+  (private agg)
   (defn agg [els len]
     (let-do [consumed 0
              clen 0]
-      (foreach [el els]
-        (if (>= clen len)
-          (break)
-          (do
-            (set! consumed (inc consumed))
-            (set! clen (+ 2 (+ clen (length el)))))))
+      (for [i 0 len]
+        (let [el (unsafe-nth els i)]
+          (if (>= clen len)
+            (break)
+            (do
+              (set! consumed (inc consumed))
+              (set! clen (+ 2 (+ clen (length el))))))))
       consumed))
 
+  (hidden decode-arr)
+  (private decode-arr)
   (defn decode-arr [s]
     (if (starts-with? s "*0\r\n")
       (Success (Null))
@@ -77,6 +85,7 @@
               (Success (Arr a))
               (Error @err)))))))
 
+  (doc from-string "converts a RESP string into a `RESP` data structure.")
   (defn from-string [s]
     (if (empty? s)
       (Success (Null))
@@ -87,9 +96,9 @@
         \$ (decode-bulk-string &(tail s))
         \* (decode-arr &(tail s))
         (Error (fmt "Malformed RESP data: got %s" s)))))
-)
 
-(definterface to-redis (Fn [a] RESP))
+  (definterface to-redis (Fn [a] RESP))
+)
 
 (defmodule String
   (defn to-redis [s] (RESP.Str s))
@@ -106,22 +115,28 @@
 (defmodule Redis
   (use-all Array Result Socket)
 
+  (doc open-on "opens the connection to Redis on port `port`.")
   (defn open-on [host port]
     (let [s (setup-client host port)]
       (if (valid? &s)
         (Success (init s))
         (Error (fmt "Couldn’t connect to %s:%d" host port)))))
 
+  (doc open "opens the connection to Redis on port 6379.
+
+For variable port numbers please check out [`open-on`](#open-on).")
   (defn open [host] (open-on host 6379))
 
+  (doc read "reads a `RESP` object from Redis.")
   (defn read [r] (RESP.from-string &(Socket.read (sock r))))
+  (doc send "sends the command `cmd` with the arguments `args` to Redis.")
   (defn send [r cmd args]
     (if (empty? args)
       (Socket.send (sock r) &(fmt "%s\r\n" &cmd))
       (Socket.send (sock r) &(str &(RESP.Arr (concat &[[(str &(to-redis cmd))] (copy-map &RESP.str args)]))))))
 
+  (doc close "closes the connection to Redis.")
   (defn close [r] (Socket.close @(sock &r)))
-
 )
 
 (defndynamic rtreat- [s]
@@ -149,6 +164,8 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
       (list 'do
         (list 'Redis.send 'r (list 'copy (rtreat- (Symbol.str cmd))) (list 'ref (rconv- args)))
         '(Redis.read r)))))
+
+; these commands were scraped from redis.io on the 9th of Feb 2020
 
 (defredis append key value)
 (defredis auth password)
@@ -391,3 +408,16 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (defredis latency-latest)
 (defredis latency-reset)
 (defredis latency-help)
+(doc Redis "is a wrapper around Redis connections. It supports opening a
+connection using [`open`](#open) or [`open-on`](#open-on), reading from and
+sending to the connection (using [`read`](#read) and [`send`](#send),
+respectively), and contains thin wrappers around all Redis commands (everything
+else).")
+(doc RESP "is a wrapper around the [Redis Serialization
+Protocol](https://redis.io/topics/protocol). You can create all types—though
+creating arrays is a little unsightly due to the absence of recursive types—,
+stringify the built types into strings using [`str`](#str), and decoding from
+the string protocol using [`from-string`](#from-string).
+
+If you want your types to be supported when encoding, you’ll have to implement
+the interface `to-redis`, the signature of which is `(Fn [a] RESP))`.")

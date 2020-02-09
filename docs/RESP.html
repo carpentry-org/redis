@@ -1,0 +1,248 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <div class="content">
+            <div class="logo">
+                <a href="http://github.com/carp-lang/Carp">
+                    <img src="logo.png">
+                </a>
+                <div class="title">
+                    redis
+                </div>
+                <div class="index">
+                    <ul>
+                        <li>
+                            <a href="RESP.html">
+                                RESP
+                            </a>
+                        </li>
+                        <li>
+                            <a href="Redis.html">
+                                Redis
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <h1>
+                RESP
+            </h1>
+            <div class="module-description">
+                <p>is a wrapper around the <a href="https://redis.io/topics/protocol">Redis Serialization
+Protocol</a>. You can create all types—though
+creating arrays is a little unsightly due to the absence of recursive types—,
+stringify the built types into strings using <a href="#str"><code>str</code></a>, and decoding from
+the string protocol using <a href="#from-string"><code>from-string</code></a>.</p>
+<p>If you want your types to be supported when encoding, you’ll have to implement
+the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RESP))</code>.</p>
+
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#Arr">
+                    <h3 id="Arr">
+                        Arr
+                    </h3>
+                </a>
+                <div class="description">
+                    instantiate
+                </div>
+                <p class="sig">
+                    (λ [(Array String)] RESP)
+                </p>
+                <span>
+                    
+                </span>
+                <p class="doc">
+                    <p>creates a <code>Arr</code>.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#Err">
+                    <h3 id="Err">
+                        Err
+                    </h3>
+                </a>
+                <div class="description">
+                    instantiate
+                </div>
+                <p class="sig">
+                    (λ [String] RESP)
+                </p>
+                <span>
+                    
+                </span>
+                <p class="doc">
+                    <p>creates a <code>Err</code>.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#Integer">
+                    <h3 id="Integer">
+                        Integer
+                    </h3>
+                </a>
+                <div class="description">
+                    instantiate
+                </div>
+                <p class="sig">
+                    (λ [Int] RESP)
+                </p>
+                <span>
+                    
+                </span>
+                <p class="doc">
+                    <p>creates a <code>Integer</code>.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#Null">
+                    <h3 id="Null">
+                        Null
+                    </h3>
+                </a>
+                <div class="description">
+                    instantiate
+                </div>
+                <p class="sig">
+                    (λ [] RESP)
+                </p>
+                <span>
+                    
+                </span>
+                <p class="doc">
+                    <p>creates a <code>Null</code>.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#Str">
+                    <h3 id="Str">
+                        Str
+                    </h3>
+                </a>
+                <div class="description">
+                    instantiate
+                </div>
+                <p class="sig">
+                    (λ [String] RESP)
+                </p>
+                <span>
+                    
+                </span>
+                <p class="doc">
+                    <p>creates a <code>Str</code>.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#copy">
+                    <h3 id="copy">
+                        copy
+                    </h3>
+                </a>
+                <div class="description">
+                    instantiate
+                </div>
+                <p class="sig">
+                    (λ [(Ref RESP a)] RESP)
+                </p>
+                <span>
+                    
+                </span>
+                <p class="doc">
+                    <p>copies a <code>RESP</code>.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#from-string">
+                    <h3 id="from-string">
+                        from-string
+                    </h3>
+                </a>
+                <div class="description">
+                    defn
+                </div>
+                <p class="sig">
+                    (λ [(Ref String a)] (Result RESP String))
+                </p>
+                <pre class="args">
+                    (from-string s)
+                </pre>
+                <p class="doc">
+                    <p>converts a RESP string into a <code>RESP</code> data structure.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#get-tag">
+                    <h3 id="get-tag">
+                        get-tag
+                    </h3>
+                </a>
+                <div class="description">
+                    instantiate
+                </div>
+                <p class="sig">
+                    (λ [(Ref RESP a)] Int)
+                </p>
+                <span>
+                    
+                </span>
+                <p class="doc">
+                    <p>Gets the tag from a <code>RESP</code>.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#prn">
+                    <h3 id="prn">
+                        prn
+                    </h3>
+                </a>
+                <div class="description">
+                    instantiate
+                </div>
+                <p class="sig">
+                    (λ [(Ref RESP a)] String)
+                </p>
+                <span>
+                    
+                </span>
+                <p class="doc">
+                    <p>converts a <code>RESP</code> to a string.</p>
+
+                </p>
+            </div>
+            <div class="binder">
+                <a class="anchor" href="#str">
+                    <h3 id="str">
+                        str
+                    </h3>
+                </a>
+                <div class="description">
+                    defn
+                </div>
+                <p class="sig">
+                    (λ [(Ref RESP a)] String)
+                </p>
+                <pre class="args">
+                    (str r)
+                </pre>
+                <p class="doc">
+                    <p>converts a <code>RESP</code> to a string.</p>
+
+                </p>
+            </div>
+        </div>
+    </body>
+</html>

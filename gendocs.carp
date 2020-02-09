@@ -1,0 +1,17 @@
+(load "redis.carp")
+
+(Project.config "title" "redis")
+(Project.config "docs-directory" "./docs/")
+(Project.config "docs-logo" "")
+(Project.config "docs-url" "https://veitheller/git/carpentry/redis")
+(Project.config "docs-styling" "style.css")
+(Project.config "docs-prelude" "is a collection of modules for talking
+to Redis.
+
+```
+(load \"https://veitheller/git/carpentry/redis@master\")
+```
+")
+
+(save-docs RESP Redis)
+(quit)

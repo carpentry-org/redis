@@ -1,4 +1,4 @@
-(load "https://veitheller.de/git/carpentry/redis.git@master")
+(load "redis.carp")
 
 (defn main []
     (match (Redis.open "127.0.0.1")
