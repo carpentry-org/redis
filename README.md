@@ -10,7 +10,9 @@ is a Redis client library for Carp.
 
 ## Usage
 
-TODO
+This package contains functions to convert to and from the Redis protocol,
+and handling Redis connections and commands. The documentation lives
+[here](https://veitheller.de/redis).
 
 You can also look at the examples in the [`examples`](./examples) directory.
 
