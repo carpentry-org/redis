@@ -1,0 +1,22 @@
+(load "https://veitheller.de/git/carpentry/redis.git@master")
+
+(defn main []
+    (match (Redis.open "127.0.0.1")
+      (Result.Success r)
+        (do
+          (Redis.send &r @"PING" &[])
+          (println* &(Redis.read &r))
+
+          (Redis.send &r @"PING" &[(to-redis @"hiiiii")])
+          (println* &(Redis.read &r))
+
+          (println* &(Redis.echo &r @"hi"))
+
+          (println* &(Redis.rpush &r @"mylist" @"1"))
+          (println* &(Redis.rpush &r @"mylist" @"2"))
+          (println* &(Redis.lrange &r @"mylist" @"-100" @"100"))
+
+          (println* &(Redis.latency-help &r))
+
+          (Redis.close r))
+      (Result.Error err) (IO.errorln &err)))
