@@ -12,7 +12,7 @@ is a Redis client library for Carp.
 
 TODO
 
-You can also look at the examples in the [`examples`](/examples) directory.
+You can also look at the examples in the [`examples`](./examples) directory.
 
 <hr/>
 
