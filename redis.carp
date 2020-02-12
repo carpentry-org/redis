@@ -34,8 +34,7 @@
         (if (not (num? l))
           (Error @"Error decoding bulk string: does not start with length!")
           (Success (Str
-            (String.prefix-string &(join "\r\n" &(suffix-array &splt 1))
-                                  (from-string l))))))))
+            (String.prefix &(join "\r\n" &(suffix &splt 1)) (from-string l))))))))
 
   (hidden agg)
   (private agg)
@@ -72,8 +71,8 @@
                     (let [il (from-string &(tail el))]
                       (if (= -1 il)
                         (aset-uninitialized! &a idx @"")
-                        (let-do [rest (suffix-array &splt (+ i 2))]
-                          (aset-uninitialized! &a idx (prefix-string &(join "\r\n" &rest) il))
+                        (let-do [rest (suffix &splt (+ i 2))]
+                          (aset-uninitialized! &a idx (String.prefix &(join "\r\n" &rest) il))
                           (set! i (+ i (agg &rest il))))))
                   \*
                     (do
@@ -143,9 +142,7 @@ For variable port numbers please check out [`open-on`](#open-on).")
   (let [i (String.index-of s \-)]
     (if (= i -1)
       s
-      (String.join [(String.prefix-string s i)
-                    " "
-                    (rtreat- (String.suffix-string s (+ i 1)))]))))
+      (String.join [(String.prefix s i) " " (rtreat- (String.suffix s (+ i 1)))]))))
 
 (defndynamic rconv- [args]
   (if (= (length args) 0)
