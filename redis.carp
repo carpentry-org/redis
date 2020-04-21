@@ -150,17 +150,18 @@ For variable port numbers please check out [`open-on`](#open-on).")
     (cons (list 'to-redis (car args)) (rconv- (cdr args)))))
 
 (defmacro defredis [cmd :rest args]
-  (list 'defmodule 'Redis
-    (list 'doc cmd (String.join [
-      "is a wrapper around the `" (rtreat- (Symbol.str cmd)) "` Redis command.
+  (eval
+    (list 'defmodule 'Redis
+      (list 'doc cmd (String.join [
+        "is a wrapper around the `" (rtreat- (Symbol.str cmd)) "` Redis command.
 
 It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (Symbol.str cmd) ")."
-    ]))
-    (list 'defn cmd (cadr (collect-into (cons 'r args) array))
-      (list 'do
-        (list 'Redis.send 'r (list 'copy (rtreat- (Symbol.str cmd))) (list 'ref (rconv- args)))
-        '(Redis.read r)))))
+      ]))
+      (list 'defn cmd (cadr (collect-into (cons 'r args) array))
+        (list 'do
+          (list 'Redis.send 'r (list 'copy (rtreat- (Symbol.str cmd))) (list 'ref (rconv- args)))
+          '(Redis.read r))))))
 
 ; these commands were scraped from redis.io on the 9th of Feb 2020
 
