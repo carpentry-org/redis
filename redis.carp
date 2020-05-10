@@ -142,7 +142,7 @@ For variable port numbers please check out [`open-on`](#open-on).")
   (let [i (String.index-of s \-)]
     (if (= i -1)
       s
-      (String.join [(String.prefix s i) " " (rtreat- (String.suffix s (+ i 1)))]))))
+      (String.concat [(String.prefix s i) " " (rtreat- (String.suffix s (+ i 1)))]))))
 
 (defndynamic rconv- [args]
   (if (= (length args) 0)
@@ -152,13 +152,13 @@ For variable port numbers please check out [`open-on`](#open-on).")
 (defmacro defredis [cmd :rest args]
   (eval
     (list 'defmodule 'Redis
-      (list 'doc cmd (String.join [
+      (list 'doc cmd (String.concat [
         "is a wrapper around the `" (rtreat- (Symbol.str cmd)) "` Redis command.
 
 It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (Symbol.str cmd) ")."
       ]))
-      (list 'defn cmd (cadr (collect-into (cons 'r args) array))
+      (list 'defn cmd (collect-into (cons 'r args) array)
         (list 'do
           (list 'Redis.send 'r (list 'copy (rtreat- (Symbol.str cmd))) (list 'ref (rconv- args)))
           '(Redis.read r))))))
