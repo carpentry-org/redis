@@ -4,13 +4,13 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="../style.css">
     </head>
     <body>
         <div class="content">
             <div class="logo">
-                <a href="http://github.com/carp-lang/Carp">
-                    <img src="logo.png">
+                <a href="https://veitheller/git/carpentry/redis">
+                    <img src="">
                 </a>
                 <div class="title">
                     redis
@@ -51,7 +51,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (append r key value)
@@ -72,7 +72,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (auth r password)
@@ -93,7 +93,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (bgrewriteaof r)
@@ -114,7 +114,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (bgsave r)
@@ -135,7 +135,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (bitcount r key)
@@ -156,7 +156,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (bitfield r key)
@@ -177,7 +177,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (bitop r operation destkey key)
@@ -198,7 +198,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (bitpos r key bit)
@@ -219,7 +219,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (blpop r key timeout)
@@ -240,7 +240,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (brpop r key timeout)
@@ -261,7 +261,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (brpoplpush r source destination timeout)
@@ -282,7 +282,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (bzpopmax r key timeout)
@@ -303,7 +303,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (bzpopmin r key timeout)
@@ -324,7 +324,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (client-getname r)
@@ -345,7 +345,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (client-id r)
@@ -366,7 +366,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (client-kill r)
@@ -387,7 +387,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (client-list r)
@@ -408,7 +408,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (client-pause r timeout)
@@ -429,7 +429,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (client-reply r)
@@ -450,7 +450,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (client-setname r connection-name)
@@ -471,7 +471,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (client-unblock r client-id)
@@ -492,7 +492,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [Redis] ())
+                    (Fn [Redis] ())
                 </p>
                 <pre class="args">
                     (close r)
@@ -512,7 +512,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-addslots r slot)
@@ -533,7 +533,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-bumpepoch r)
@@ -554,7 +554,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-count-failure-reports r node-id)
@@ -575,7 +575,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-countkeysinslot r slot)
@@ -596,7 +596,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-delslots r slot)
@@ -617,7 +617,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-failover r)
@@ -638,7 +638,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-flushslots r)
@@ -659,7 +659,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-forget r node-id)
@@ -680,7 +680,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-getkeysinslot r slot count)
@@ -701,7 +701,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-info r)
@@ -722,7 +722,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-keyslot r key)
@@ -743,7 +743,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-meet r ip port)
@@ -764,7 +764,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-myid r)
@@ -785,7 +785,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-nodes r)
@@ -806,7 +806,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-replicas r node-id)
@@ -827,7 +827,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-replicate r node-id)
@@ -848,7 +848,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-reset r)
@@ -869,7 +869,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-saveconfig r)
@@ -890,7 +890,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-set-config-epoch r config-epoch)
@@ -911,7 +911,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-setslot r slot)
@@ -932,7 +932,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-slaves r node-id)
@@ -953,7 +953,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (cluster-slots r)
@@ -974,7 +974,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (command r)
@@ -995,7 +995,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (command-count r)
@@ -1016,7 +1016,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (command-getkeys r)
@@ -1037,7 +1037,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (command-info r command-name)
@@ -1058,7 +1058,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (config-get r parameter)
@@ -1079,7 +1079,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (config-resetstat r)
@@ -1100,7 +1100,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (config-rewrite r)
@@ -1121,7 +1121,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (config-set r parameter value)
@@ -1142,7 +1142,7 @@ else).</p>
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] Redis)
+                    (Fn [(Ref Redis a)] Redis)
                 </p>
                 <span>
                     
@@ -1162,7 +1162,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (dbsize r)
@@ -1183,7 +1183,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (debug-object r key)
@@ -1204,7 +1204,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (debug-segfault r)
@@ -1225,7 +1225,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (decr r key)
@@ -1246,7 +1246,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (decrby r key decrement)
@@ -1267,7 +1267,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (del r key)
@@ -1288,7 +1288,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (discard r)
@@ -1309,7 +1309,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (dump r key)
@@ -1330,7 +1330,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (echo r message)
@@ -1351,7 +1351,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (eval r script numkeys key)
@@ -1372,7 +1372,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (evalsha r sha1 numkeys key)
@@ -1393,7 +1393,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (exec r)
@@ -1414,7 +1414,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (exists r key)
@@ -1435,7 +1435,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (expire r key seconds)
@@ -1456,7 +1456,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (expireat r key timestamp)
@@ -1477,7 +1477,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (flushall r)
@@ -1498,7 +1498,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (flushdb r)
@@ -1519,7 +1519,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d, e] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d, e] (Result RESP String))
                 </p>
                 <pre class="args">
                     (geoadd r key longitude latitude member)
@@ -1540,7 +1540,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (geodist r key member1 member2)
@@ -1561,7 +1561,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (geohash r key member)
@@ -1582,7 +1582,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (geopos r key member)
@@ -1603,7 +1603,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d, e] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d, e] (Result RESP String))
                 </p>
                 <pre class="args">
                     (georadius r key longitude latitude radius)
@@ -1624,7 +1624,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (georadiusbymember r key member radius)
@@ -1645,7 +1645,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (get r key)
@@ -1666,7 +1666,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (getbit r key offset)
@@ -1687,7 +1687,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (getrange r key start end)
@@ -1708,7 +1708,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (getset r key value)
@@ -1729,7 +1729,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hdel r key field)
@@ -1750,7 +1750,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hexists r key field)
@@ -1771,7 +1771,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hget r key field)
@@ -1792,7 +1792,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hgetall r key)
@@ -1813,7 +1813,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hincrby r key field increment)
@@ -1834,7 +1834,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hincrbyfloat r key field increment)
@@ -1855,7 +1855,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hkeys r key)
@@ -1876,7 +1876,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hlen r key)
@@ -1897,7 +1897,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hmget r key field)
@@ -1918,7 +1918,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hmset r key field value)
@@ -1939,7 +1939,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hscan r key cursor)
@@ -1960,7 +1960,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hset r key field value)
@@ -1981,7 +1981,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hsetnx r key field value)
@@ -2002,7 +2002,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hstrlen r key field)
@@ -2023,7 +2023,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (hvals r key)
@@ -2044,7 +2044,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (incr r key)
@@ -2065,7 +2065,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (incrby r key increment)
@@ -2086,7 +2086,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (incrbyfloat r key increment)
@@ -2107,7 +2107,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (info r)
@@ -2128,7 +2128,7 @@ else).</p>
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [Socket] Redis)
+                    (Fn [Socket] Redis)
                 </p>
                 <span>
                     
@@ -2148,7 +2148,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (keys r pattern)
@@ -2169,7 +2169,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lastsave r)
@@ -2190,7 +2190,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (latency-doctor r)
@@ -2211,7 +2211,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (latency-graph r event)
@@ -2232,7 +2232,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (latency-help r)
@@ -2253,7 +2253,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (latency-history r event)
@@ -2274,7 +2274,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (latency-latest r)
@@ -2295,7 +2295,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (latency-reset r)
@@ -2316,7 +2316,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lindex r key index)
@@ -2337,7 +2337,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d, e] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d, e] (Result RESP String))
                 </p>
                 <pre class="args">
                     (linsert r key w pivot element)
@@ -2358,7 +2358,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (llen r key)
@@ -2379,7 +2379,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lolwut r)
@@ -2400,7 +2400,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lpop r key)
@@ -2421,7 +2421,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lpush r key element)
@@ -2442,7 +2442,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lpushx r key element)
@@ -2463,7 +2463,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lrange r key start stop)
@@ -2484,7 +2484,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lrem r key count element)
@@ -2505,7 +2505,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (lset r key index element)
@@ -2526,7 +2526,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (ltrim r key start stop)
@@ -2547,7 +2547,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (memory-doctor r)
@@ -2568,7 +2568,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (memory-help r)
@@ -2589,7 +2589,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (memory-malloc-stats r)
@@ -2610,7 +2610,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (memory-purge r)
@@ -2631,7 +2631,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (memory-stats r)
@@ -2652,7 +2652,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (memory-usage r key)
@@ -2673,7 +2673,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (mget r key)
@@ -2694,7 +2694,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d, e, f] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d, e, f] (Result RESP String))
                 </p>
                 <pre class="args">
                     (migrate r host port key destination-db timeout)
@@ -2715,7 +2715,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (module-list r)
@@ -2736,7 +2736,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (module-load r path)
@@ -2757,7 +2757,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (module-unload r name)
@@ -2778,7 +2778,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (monitor r)
@@ -2799,7 +2799,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (move r key db)
@@ -2820,7 +2820,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (mset r key value)
@@ -2841,7 +2841,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (msetnx r key value)
@@ -2862,7 +2862,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (multi r)
@@ -2883,7 +2883,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (object r subcommand)
@@ -2904,7 +2904,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref String a)] (Result Redis String))
+                    (Fn [(Ref String a)] (Result Redis String))
                 </p>
                 <pre class="args">
                     (open host)
@@ -2925,7 +2925,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref String a), Int] (Result Redis String))
+                    (Fn [(Ref String a), Int] (Result Redis String))
                 </p>
                 <pre class="args">
                     (open-on host port)
@@ -2945,7 +2945,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (persist r key)
@@ -2966,7 +2966,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (pexpire r key milliseconds)
@@ -2987,7 +2987,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (pexpireat r key milliseconds-timestamp)
@@ -3008,7 +3008,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (pfadd r key element)
@@ -3029,7 +3029,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (pfcount r key)
@@ -3050,7 +3050,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (pfmerge r destkey sourcekey)
@@ -3071,7 +3071,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (ping r)
@@ -3092,7 +3092,7 @@ else).</p>
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] String)
+                    (Fn [(Ref Redis a)] String)
                 </p>
                 <span>
                     
@@ -3112,7 +3112,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (psetex r key milliseconds value)
@@ -3133,7 +3133,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (psubscribe r pattern)
@@ -3154,7 +3154,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (psync r replicationid offset)
@@ -3175,7 +3175,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (pttl r key)
@@ -3196,7 +3196,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (publish r channel message)
@@ -3217,7 +3217,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (pubsub r subcommand)
@@ -3238,7 +3238,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (punsubscribe r)
@@ -3259,7 +3259,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (quit r)
@@ -3280,7 +3280,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (randomkey r)
@@ -3301,7 +3301,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (read r)
@@ -3321,7 +3321,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (readonly r)
@@ -3342,7 +3342,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (readwrite r)
@@ -3363,7 +3363,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (rename r key newkey)
@@ -3384,7 +3384,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (renamenx r key newkey)
@@ -3405,7 +3405,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (replicaof r host port)
@@ -3426,7 +3426,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (restore r key ttl serialized-value)
@@ -3447,7 +3447,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (role r)
@@ -3468,7 +3468,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (rpop r key)
@@ -3489,7 +3489,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (rpoplpush r source destination)
@@ -3510,7 +3510,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (rpush r key element)
@@ -3531,7 +3531,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (rpushx r key element)
@@ -3552,7 +3552,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sadd r key member)
@@ -3573,7 +3573,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (save r)
@@ -3594,7 +3594,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (scan r cursor)
@@ -3615,7 +3615,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (scard r key)
@@ -3636,7 +3636,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (script-debug r mode)
@@ -3657,7 +3657,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (script-exists r sha1)
@@ -3678,7 +3678,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (script-flush r)
@@ -3699,7 +3699,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (script-kill r)
@@ -3720,7 +3720,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (script-load r script)
@@ -3741,7 +3741,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sdiff r key)
@@ -3762,7 +3762,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sdiffstore r destination key)
@@ -3783,7 +3783,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (select r index)
@@ -3804,7 +3804,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, (Ref (Array RESP) c)] ())
+                    (Fn [(Ref Redis a), b, (Ref (Array RESP) c)] ())
                 </p>
                 <pre class="args">
                     (send r cmd args)
@@ -3824,7 +3824,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (set r key value)
@@ -3845,7 +3845,7 @@ else).</p>
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [Redis, Socket] Redis)
+                    (Fn [Redis, Socket] Redis)
                 </p>
                 <span>
                     
@@ -3865,7 +3865,7 @@ else).</p>
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), Socket] ())
+                    (Fn [(Ref Redis a), Socket] ())
                 </p>
                 <span>
                     
@@ -3885,7 +3885,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (setbit r key offset value)
@@ -3906,7 +3906,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (setex r key seconds value)
@@ -3927,7 +3927,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (setnx r key value)
@@ -3948,7 +3948,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (setrange r key offset value)
@@ -3969,7 +3969,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (shutdown r)
@@ -3990,7 +3990,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sinter r key)
@@ -4011,7 +4011,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sinterstore r destination key)
@@ -4032,7 +4032,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sismember r key member)
@@ -4053,7 +4053,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (slaveof r host port)
@@ -4074,7 +4074,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (slowlog r subcommand)
@@ -4095,7 +4095,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (smembers r key)
@@ -4116,7 +4116,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (smove r source destination member)
@@ -4137,7 +4137,7 @@ else).</p>
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Ref Socket a))
+                    (Fn [(Ref Redis a)] (Ref Socket a))
                 </p>
                 <span>
                     
@@ -4157,7 +4157,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sort r key)
@@ -4178,7 +4178,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (spop r key)
@@ -4199,7 +4199,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (srandmember r key)
@@ -4220,7 +4220,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (srem r key member)
@@ -4241,7 +4241,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sscan r key cursor)
@@ -4262,7 +4262,7 @@ else).</p>
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] String)
+                    (Fn [(Ref Redis a)] String)
                 </p>
                 <span>
                     
@@ -4282,7 +4282,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (strlen r key)
@@ -4303,7 +4303,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (subscribe r channel)
@@ -4324,7 +4324,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sunion r key)
@@ -4345,7 +4345,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sunionstore r destination key)
@@ -4366,7 +4366,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (swapdb r index1 index2)
@@ -4387,7 +4387,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (sync r)
@@ -4408,7 +4408,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (time r)
@@ -4429,7 +4429,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (touch r key)
@@ -4450,7 +4450,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (ttl r key)
@@ -4471,7 +4471,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (type r key)
@@ -4492,7 +4492,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (unlink r key)
@@ -4513,7 +4513,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (unsubscribe r)
@@ -4534,7 +4534,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (unwatch r)
@@ -4555,7 +4555,7 @@ else).</p>
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [Redis, (Ref (λ [Socket] Socket a) b)] Redis)
+                    (Fn [Redis, (Ref (Fn [Socket] Socket a) b)] Redis)
                 </p>
                 <span>
                     
@@ -4575,7 +4575,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (wait r numreplicas timeout)
@@ -4596,7 +4596,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (watch r key)
@@ -4617,7 +4617,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xack r key group ID)
@@ -4638,7 +4638,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d, e] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d, e] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xadd r key ID field value)
@@ -4659,7 +4659,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d, e, f] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d, e, f] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xclaim r key group consumer min-idle-time ID)
@@ -4680,7 +4680,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xdel r key ID)
@@ -4701,7 +4701,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xgroup r)
@@ -4722,7 +4722,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xinfo r)
@@ -4743,7 +4743,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xlen r key)
@@ -4764,7 +4764,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xpending r key group)
@@ -4785,7 +4785,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xrange r key start end)
@@ -4806,7 +4806,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a)] (Result RESP String))
+                    (Fn [(Ref Redis a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xread r)
@@ -4827,7 +4827,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xreadgroup r GROUP group consumer)
@@ -4848,7 +4848,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xrevrange r key end start)
@@ -4869,7 +4869,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (xtrim r key MAXLEN count)
@@ -4890,7 +4890,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zadd r key)
@@ -4911,7 +4911,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zcard r key)
@@ -4932,7 +4932,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zcount r key min max)
@@ -4953,7 +4953,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zincrby r key increment member)
@@ -4974,7 +4974,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zinterstore r destination numkeys key)
@@ -4995,7 +4995,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zlexcount r key min max)
@@ -5016,7 +5016,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zpopmax r key)
@@ -5037,7 +5037,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b] (Result RESP String))
+                    (Fn [(Ref Redis a), b] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zpopmin r key)
@@ -5058,7 +5058,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrange r key start stop)
@@ -5079,7 +5079,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrangebylex r key min max)
@@ -5100,7 +5100,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrangebyscore r key min max)
@@ -5121,7 +5121,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrank r key member)
@@ -5142,7 +5142,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrem r key member)
@@ -5163,7 +5163,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zremrangebylex r key min max)
@@ -5184,7 +5184,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zremrangebyrank r key start stop)
@@ -5205,7 +5205,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zremrangebyscore r key min max)
@@ -5226,7 +5226,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrevrange r key start stop)
@@ -5247,7 +5247,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrevrangebylex r key max min)
@@ -5268,7 +5268,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrevrangebyscore r key max min)
@@ -5289,7 +5289,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zrevrank r key member)
@@ -5310,7 +5310,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zscan r key cursor)
@@ -5331,7 +5331,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zscore r key member)
@@ -5352,7 +5352,7 @@ else).</p>
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref Redis a), b, c, d] (Result RESP String))
+                    (Fn [(Ref Redis a), b, c, d] (Result RESP String))
                 </p>
                 <pre class="args">
                     (zunionstore r destination numkeys key)

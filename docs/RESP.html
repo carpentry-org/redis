@@ -4,13 +4,13 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="../style.css">
     </head>
     <body>
         <div class="content">
             <div class="logo">
-                <a href="http://github.com/carp-lang/Carp">
-                    <img src="logo.png">
+                <a href="https://veitheller/git/carpentry/redis">
+                    <img src="">
                 </a>
                 <div class="title">
                     redis
@@ -53,7 +53,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Array String)] RESP)
+                    (Fn [(Array String)] RESP)
                 </p>
                 <span>
                     
@@ -73,7 +73,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [String] RESP)
+                    (Fn [String] RESP)
                 </p>
                 <span>
                     
@@ -93,7 +93,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [Int] RESP)
+                    (Fn [Int] RESP)
                 </p>
                 <span>
                     
@@ -113,7 +113,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [] RESP)
+                    (Fn [] RESP)
                 </p>
                 <span>
                     
@@ -133,7 +133,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [String] RESP)
+                    (Fn [String] RESP)
                 </p>
                 <span>
                     
@@ -153,7 +153,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Ref RESP a)] RESP)
+                    (Fn [(Ref RESP a)] RESP)
                 </p>
                 <span>
                     
@@ -173,7 +173,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref String a)] (Result RESP String))
+                    (Fn [(Ref String a)] (Result RESP String))
                 </p>
                 <pre class="args">
                     (from-string s)
@@ -193,7 +193,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Ref RESP a)] Int)
+                    (Fn [(Ref RESP a)] Int)
                 </p>
                 <span>
                     
@@ -213,7 +213,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     instantiate
                 </div>
                 <p class="sig">
-                    (λ [(Ref RESP a)] String)
+                    (Fn [(Ref RESP a)] String)
                 </p>
                 <span>
                     
@@ -233,7 +233,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref RESP a)] String)
+                    (Fn [(Ref RESP a)] String)
                 </p>
                 <pre class="args">
                     (str r)

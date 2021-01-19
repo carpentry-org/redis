@@ -1,4 +1,4 @@
-(load "git@github.com:carpentry-org/sockets@master")
+(load "git@github.com:carpentry-org/sockets@0.0.2")
 
 (deftype RESP
   (Null [])
@@ -30,11 +30,12 @@
     (if (starts-with? s "-1\r\n")
       (Success (Null))
       (let [splt (split #"\r\n" s)
-            l &(unsafe-first &splt)]
-        (if (not (num? l))
-          (Error @"Error decoding bulk string: does not start with length!")
-          (Success (Str
-            (String.prefix &(join "\r\n" &(suffix &splt 1)) (from-string l))))))))
+            l (unsafe-first &splt)]
+        (match (from-string l)
+          (Maybe.Nothing) (Error @"Error decoding bulk string: does not start with length!")
+          (Maybe.Just il)
+            (Success (Str
+              (String.prefix &(join "\r\n" &(suffix &splt 1)) il)))))))
 
   (hidden agg)
   (private agg)
@@ -56,42 +57,49 @@
     (if (starts-with? s "*0\r\n")
       (Success (Null))
       (let [splt (split #"\r\n" &(chomp s))
-            sl &(unsafe-first &splt)]
-        (if (not (num? sl))
-          (Error @"Error decoding array: does not start with length!")
-          (let-do [l (from-string sl)
-                   a (Array.allocate l)
-                   idx 0
-                   err ""]
-            (for [i 0 (- (length &splt) 1)]
-              ; TODO: have nested structures
-              (let-do [el (unsafe-nth &splt (+ i 1))]
-                (case (head el)
-                  \$
-                    (let [il (from-string &(tail el))]
-                      (if (= -1 il)
-                        (aset-uninitialized! &a idx @"")
-                        (let-do [rest (suffix &splt (+ i 2))]
-                          (aset-uninitialized! &a idx (String.prefix &(join "\r\n" &rest) il))
-                          (set! i (+ i (agg &rest il))))))
-                  \*
-                    (do
-                      (set! err "TODO: cannot deal with nested arrays")
-                      (break))
-                  (aset-uninitialized! &a idx (chomp el)))
-                (set! idx (inc idx))))
-            (if (= err "")
-              (Success (Arr a))
-              (Error @err)))))))
+            sl (unsafe-first &splt)]
+        (match (from-string sl)
+          (Maybe.Nothing)
+            (Error @"Error decoding array: does not start with length!")
+          (Maybe.Just l)
+            (let-do [a (Array.allocate l)
+                     idx 0
+                     err ""]
+              (for [i 0 (- (length &splt) 1)]
+                ; TODO: have nested structures
+                (let-do [el (unsafe-nth &splt (+ i 1))]
+                  (case (head el)
+                    \$
+                      (match (from-string &(tail el))
+                        (Maybe.Nothing)
+                          (aset-uninitialized! &a idx @"")
+                        (Maybe.Just il)
+                          (let-do [rest (suffix &splt (+ i 2))]
+                            (aset-uninitialized! &a idx (String.prefix &(join "\r\n" &rest) il))
+                            (set! i (+ i (agg &rest il)))))
+                    \*
+                      (do
+                        (set! err "TODO: cannot deal with nested arrays")
+                        (break))
+                    (aset-uninitialized! &a idx (chomp el)))
+                  (set! idx (inc idx))))
+              (if (= err "")
+                (Success (Arr a))
+                (Error @err)))))))
 
   (doc from-string "converts a RESP string into a `RESP` data structure.")
   (defn from-string [s]
     (if (empty? s)
       (Success (Null))
       (case (head s)
-        \+ (Success (Str (unsafe-first &(split #"\r\n" &(tail s)))))
-        \- (Success (Err (unsafe-first &(split #"\r\n" &(tail s)))))
-        \: (Success (Integer (from-string &(unsafe-first &(split #"\r\n" &(tail s))))))
+        \+ (Success (Str @(unsafe-first &(split #"\r\n" &(tail s)))))
+        \- (Success (Err @(unsafe-first &(split #"\r\n" &(tail s)))))
+        \:
+          (match (from-string (unsafe-first &(split #"\r\n" &(tail s))))
+            (Maybe.Nothing)
+              (Error @"Could not parse integer in result.")
+            (Maybe.Just i)
+              (Success (Integer i)))
         \$ (decode-bulk-string &(tail s))
         \* (decode-arr &(tail s))
         (Error (fmt "Malformed RESP data: got %s" s)))))
@@ -101,10 +109,12 @@
 
 (defmodule String
   (defn to-redis [s] (RESP.Str s))
+  (implements to-redis String.to-redis)
 )
 
 (defmodule Int
   (defn to-redis [s] (RESP.Integer s))
+  (implements to-redis Int.to-redis)
 )
 
 (deftype Redis [
