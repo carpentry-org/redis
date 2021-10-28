@@ -5,16 +5,11 @@
   (Str [String])
   (Err [String])
   (Integer [Int])
-  ;(Arr [(Array &RESP)])
-  (Arr [(Array String)])
+  (Arr [(Array (Box RESP))])
 )
 
 (defmodule RESP
   (use-all Array Maybe Pattern Result)
-
-  (hidden c)
-  (private c)
-  (def c (prn &@&[@""]))
 
   (defn str [r]
     (match @r
@@ -22,87 +17,85 @@
       (Str s) (fmt "$%d\r\n%s\r\n" (String.length &s) &s)
       (Err s) (fmt "-%s\r\n" &s)
       (Integer i) (fmt ":%d\r\n" i)
-      (Arr a) (fmt "*%d\r\n%s" (Array.length &a) &(String.concat &a))))
+      (Arr a)
+        (fmt "*%d\r\n%s"
+          (Array.length &a)
+          &(String.concat &(Array.copy-map &(fn [b] (str (unbox b))) &a)))))
 
   (hidden decode-bulk-string)
   (private decode-bulk-string)
   (defn decode-bulk-string [s]
     (if (starts-with? s "-1\r\n")
-      (Success (Null))
+      (Success (Pair 4 (Null)))
       (let [splt (split #"\r\n" s)
             l (unsafe-first &splt)]
         (match (from-string l)
           (Nothing) (Error @"Error decoding bulk string: does not start with length!")
           (Just il)
-            (Success (Str
-              (String.prefix &(join "\r\n" &(suffix &splt 1)) il)))))))
+            (Success
+              (Pair (+ il 3)
+                    (Str
+                      (String.prefix &(join "\r\n" &(suffix &splt 1)) il))))))))
 
-  (hidden agg)
-  (private agg)
-  (defn agg [els len]
-    (let-do [consumed 0
-             clen 0]
-      (for [i 0 len]
-        (let [el (unsafe-nth els i)]
-          (if (>= clen len)
-            (break)
-            (do
-              (set! consumed (inc consumed))
-              (set! clen (+ 2 (+ clen (String.length el))))))))
-      consumed))
+  (private from-string-)
+  (hidden from-string-)
+  (sig from-string- (Fn [&String] (Result (Pair Int RESP) String)))
+  (defn from-string- [s] (Error @"dummy"))
 
   (hidden decode-arr)
   (private decode-arr)
-  (defn decode-arr [s]
-    (if (starts-with? s "*0\r\n")
-      (Success (Null))
-      (let [splt (split #"\r\n" &(chomp s))
-            sl (unsafe-first &splt)]
+  (defn decode-arr [is]
+    (if (starts-with? &is "0\r\n")
+      (Success (Pair 4 (Arr [])))
+      (let [splt (split #"\r\n" &(chomp &is))
+            sl (unsafe-first &splt)
+            s (join "\r\n" &(suffix &splt 1))]
         (match (from-string sl)
           (Nothing)
             (Error @"Error decoding array: does not start with length!")
           (Just l)
             (let-do [a (Array.allocate l)
-                     idx 0
-                     err ""]
-              (for [i 0 (- (length &splt) 1)]
-                ; TODO: have nested structures
-                (let-do [el (unsafe-nth &splt (+ i 1))]
-                  (case (head el)
-                    \$
-                      (match (from-string &(tail el))
-                        (Maybe.Nothing)
-                          (aset-uninitialized! &a idx @"")
-                        (Maybe.Just il)
-                          (let-do [rest (suffix &splt (+ i 2))]
-                            (aset-uninitialized! &a idx (String.prefix &(join "\r\n" &rest) il))
-                            (set! i (+ i (agg &rest il)))))
-                    \*
-                      (do
-                        (set! err "TODO: cannot deal with nested arrays")
-                        (break))
-                    (aset-uninitialized! &a idx (chomp el)))
-                  (set! idx (inc idx))))
-              (if (= err "")
-                (Success (Arr a))
-                (Error @err)))))))
+                     consumed 0
+                     err @""]
+              (for [i 0 (- l 1)]
+                (match (from-string- &s)
+                  (Error msg)
+                    (do
+                      (set! err msg)
+                      (break))
+                  (Success p)
+                    (do
+                      (+= consumed @(Pair.a &p))
+                      (aset-uninitialized! &a i (Box @(Pair.b &p)))
+                      (set! s (String.suffix &s @(Pair.a &p))))))
+              (if (= &err "")
+                (Success (Pair consumed (Arr a)))
+                (Error err)))))))
+
+  (defn from-string- [s]
+    (if (empty? s)
+      (Success (Pair 0 (Null)))
+      (case (head s)
+        \+
+          (let [f (unsafe-first &(split #"\r\n" &(tail s)))]
+            (Success (Pair (String.length f) (Str @f))))
+        \-
+          (let [f (unsafe-first &(split #"\r\n" &(tail s)))]
+            (Success (Pair (String.length f) (Err @f))))
+        \:
+          (let [f (unsafe-first &(split #"\r\n" &(tail s)))]
+            (match (from-string f)
+              (Maybe.Nothing)
+                (Error @"Could not parse integer in result.")
+              (Maybe.Just i)
+                (Success (Pair (String.length f) (Integer i)))))
+        \$ (decode-bulk-string &(tail s))
+        \* (decode-arr (tail s))
+        (Error (fmt "Malformed RESP data: got %s" s)))))
 
   (doc from-string "converts a RESP string into a `RESP` data structure.")
   (defn from-string [s]
-    (if (empty? s)
-      (Success (Null))
-      (case (head s)
-        \+ (Success (Str @(unsafe-first &(split #"\r\n" &(tail s)))))
-        \- (Success (Err @(unsafe-first &(split #"\r\n" &(tail s)))))
-        \:
-          (match (from-string (unsafe-first &(split #"\r\n" &(tail s))))
-            (Maybe.Nothing)
-              (Error @"Could not parse integer in result.")
-            (Maybe.Just i)
-              (Success (Integer i)))
-        \$ (decode-bulk-string &(tail s))
-        \* (decode-arr &(tail s))
-        (Error (fmt "Malformed RESP data: got %s" s)))))
+    (Result.map (from-string- s) &(fn [p] @(Pair.b &p))))
 
   (definterface to-redis (Fn [a] RESP))
 )
@@ -140,9 +133,9 @@ For variable port numbers please check out [`open-on`](#open-on).")
   (defn read [r] (RESP.from-string &(Socket.read (sock r))))
   (doc send "sends the command `cmd` with the arguments `args` to Redis.")
   (defn send [r cmd args]
-    (if (empty? args)
-      (Socket.send (sock r) &(fmt "%s\r\n" &cmd))
-      (Socket.send (sock r) &(str &(RESP.Arr (concat &[[(str &(to-redis cmd))] (copy-map &RESP.str args)]))))))
+    (if (empty? &args)
+      (Socket.send (sock r) &(fmt "%s\r\n" cmd))
+      (Socket.send (sock r) &(str &(RESP.Arr (concat &[[(Box (to-redis @cmd))] args]))))))
 
   (doc close "closes the connection to Redis.")
   (defn close [r] (Socket.close @(sock &r)))
@@ -157,7 +150,7 @@ For variable port numbers please check out [`open-on`](#open-on).")
 (defndynamic rconv- [args]
   (if (= (length args) 0)
     (array)
-    (cons (list 'to-redis (car args)) (rconv- (cdr args)))))
+    (cons (list 'Box (list 'to-redis (car args))) (rconv- (cdr args)))))
 
 (defmacro defredis [cmd :rest args]
   (eval
@@ -170,7 +163,7 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
       ]))
       (list 'defn cmd (collect-into (cons 'r args) array)
         (list 'do
-          (list 'Redis.send 'r (list 'copy (rtreat- (Symbol.str cmd))) (list 'ref (rconv- args)))
+          (list 'Redis.send 'r (rtreat- (Symbol.str cmd)) (rconv- args))
           '(Redis.read r))))))
 
 ; these commands were scraped from redis.io on the 9th of Feb 2020
