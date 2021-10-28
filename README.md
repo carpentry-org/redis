@@ -5,7 +5,7 @@ is a Redis client library for Carp.
 ## Installation
 
 ```clojure
-(load "https://veitheller.de/git/carpentry/redis.git@master")
+(load "https://git.veitheller.de/carpentry/redis.git@master")
 ```
 
 ## Usage
