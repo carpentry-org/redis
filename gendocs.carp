@@ -3,13 +3,12 @@
 (Project.config "title" "redis")
 (Project.config "docs-directory" "./docs/")
 (Project.config "docs-logo" "")
-(Project.config "docs-url" "https://veitheller/git/carpentry/redis")
+(Project.config "docs-url" "https://git.veitheller.de/carpentry/redis")
 (Project.config "docs-styling" "../style.css")
-(Project.config "docs-prelude" "is a collection of modules for talking
-to Redis.
+(Project.config "docs-prelude" "is a Redis client library for Carp.
 
 ```
-(load \"https://veitheller/git/carpentry/redis@master\")
+(load \"https://git.veitheller.de/carpentry/redis.git@master\")
 ```
 ")
 
