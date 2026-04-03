@@ -5,7 +5,7 @@ A Redis client library for Carp, supporting Redis 7.x.
 ## Installation
 
 ```clojure
-(load "https://git.veitheller.de/carpentry/redis.git@master")
+(load "https://git.veitheller.de/carpentry/redis.git@0.1.0")
 ```
 
 ## Usage
