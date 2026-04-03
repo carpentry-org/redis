@@ -40,6 +40,25 @@ Protocol</a>. You can create all types,
 stringify the built types into strings using <a href="#str"><code>str</code></a>, and decode from
 the string protocol using <a href="#from-string"><code>from-string</code></a>. Arrays are fully
 supported, including nested arrays.</p>
+<pre><code>; decoding
+(RESP.from-string &quot;+OK\r\n&quot;)       ; =&gt; (Success (Str @&quot;OK&quot;))
+(RESP.from-string &quot;:42\r\n&quot;)       ; =&gt; (Success (Integer 42))
+(RESP.from-string &quot;$-1\r\n&quot;)       ; =&gt; (Success (Null))
+
+; encoding
+(str &amp;(RESP.Str @&quot;hi&quot;))             ; =&gt; &quot;$2\r\nhi\r\n&quot;
+(str &amp;(RESP.Integer 42))            ; =&gt; &quot;:42\r\n&quot;
+
+; pattern matching on responses
+(match (Redis.get &amp;r @&quot;key&quot;)
+  (Result.Success resp)
+    (match resp
+      (RESP.Str s) (println* &quot;got: &quot; &amp;s)
+      (RESP.Null) (println* &quot;not found&quot;)
+      (RESP.Arr items) (println* &quot;array of &quot; &amp;(Int.str (Array.length &amp;items)))
+      _ (println* &quot;other&quot;))
+  (Result.Error e) (println* &quot;error: &quot; &amp;e))
+</code></pre>
 <p>If you want your types to be supported when encoding, you’ll have to implement
 the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RESP))</code>.</p>
 

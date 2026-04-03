@@ -503,13 +503,44 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (doc Redis "is a wrapper around Redis connections. It supports opening a
 connection using [`open`](#open) or [`open-on`](#open-on), reading from and
 sending to the connection (using [`read`](#read) and [`send`](#send),
-respectively), and contains thin wrappers around all Redis commands (everything
-else).")
+respectively), and contains thin wrappers around all Redis commands through 7.2.
+
+```
+(match (Redis.open \"127.0.0.1\")
+  (Result.Success r)
+    (do
+      (println* &(Redis.set &r @\"key\" @\"val\"))
+      (println* &(Redis.get &r @\"key\"))
+      (println* &(Redis.lrange &r @\"list\" @\"0\" @\"-1\"))
+      (Redis.close r))
+  (Result.Error err) (IO.errorln &err))
+```")
 (doc RESP "is a wrapper around the [Redis Serialization
 Protocol](https://redis.io/topics/protocol). You can create all types,
 stringify the built types into strings using [`str`](#str), and decode from
 the string protocol using [`from-string`](#from-string). Arrays are fully
 supported, including nested arrays.
+
+```
+; decoding
+(RESP.from-string \"+OK\\r\\n\")       ; => (Success (Str @\"OK\"))
+(RESP.from-string \":42\\r\\n\")       ; => (Success (Integer 42))
+(RESP.from-string \"$-1\\r\\n\")       ; => (Success (Null))
+
+; encoding
+(str &(RESP.Str @\"hi\"))             ; => \"$2\\r\\nhi\\r\\n\"
+(str &(RESP.Integer 42))            ; => \":42\\r\\n\"
+
+; pattern matching on responses
+(match (Redis.get &r @\"key\")
+  (Result.Success resp)
+    (match resp
+      (RESP.Str s) (println* \"got: \" &s)
+      (RESP.Null) (println* \"not found\")
+      (RESP.Arr items) (println* \"array of \" &(Int.str (Array.length &items)))
+      _ (println* \"other\"))
+  (Result.Error e) (println* \"error: \" &e))
+```
 
 If you want your types to be supported when encoding, you’ll have to implement
 the interface `to-redis`, the signature of which is `(Fn [a] RESP))`.")

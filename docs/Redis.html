@@ -38,8 +38,16 @@
                     <p>is a wrapper around Redis connections. It supports opening a
 connection using <a href="#open"><code>open</code></a> or <a href="#open-on"><code>open-on</code></a>, reading from and
 sending to the connection (using <a href="#read"><code>read</code></a> and <a href="#send"><code>send</code></a>,
-respectively), and contains thin wrappers around all Redis commands (everything
-else).</p>
+respectively), and contains thin wrappers around all Redis commands through 7.2.</p>
+<pre><code>(match (Redis.open &quot;127.0.0.1&quot;)
+  (Result.Success r)
+    (do
+      (println* &amp;(Redis.set &amp;r @&quot;key&quot; @&quot;val&quot;))
+      (println* &amp;(Redis.get &amp;r @&quot;key&quot;))
+      (println* &amp;(Redis.lrange &amp;r @&quot;list&quot; @&quot;0&quot; @&quot;-1&quot;))
+      (Redis.close r))
+  (Result.Error err) (IO.errorln &amp;err))
+</code></pre>
 
                 </div>
                 <div class="binder">
