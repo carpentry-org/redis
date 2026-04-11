@@ -3103,7 +3103,7 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [Socket] Redis)
+                        (Fn [TcpStream] Redis)
                     </p>
                     <span>
                         
@@ -4988,7 +4988,7 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [Redis, Socket] Redis)
+                        (Fn [Redis, TcpStream] Redis)
                     </p>
                     <span>
                         
@@ -5008,7 +5008,7 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [(Ref Redis a), Socket] ())
+                        (Fn [(Ref Redis a), TcpStream] ())
                     </p>
                     <span>
                         
@@ -5322,7 +5322,7 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [(Ref Redis a)] (Ref Socket a))
+                        (Fn [(Ref Redis a)] (Ref TcpStream a))
                     </p>
                     <span>
                         
@@ -5824,7 +5824,7 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [Redis, (Ref (Fn [Socket] Socket a) b)] Redis)
+                        (Fn [Redis, (Ref (Fn [TcpStream] TcpStream a) b)] Redis)
                     </p>
                     <span>
                         

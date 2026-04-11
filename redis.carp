@@ -1,4 +1,4 @@
-(load "git@github.com:carpentry-org/sockets@0.0.2")
+(load "git@github.com:carpentry-org/socket@0.1.1")
 
 (deftype RESP
   (Null [])
@@ -117,18 +117,17 @@
 )
 
 (deftype Redis [
-  sock Socket
+  sock TcpStream
 ])
 
 (defmodule Redis
-  (use-all Array Result Socket)
+  (use-all Array Result)
 
   (doc open-on "opens the connection to Redis on port `port`.")
   (defn open-on [host port]
-    (let [s (setup-client host port)]
-      (if (valid? &s)
-        (Success (init s))
-        (Error (fmt "Couldn’t connect to %s:%d" host port)))))
+    (match (TcpStream.connect host port)
+      (Result.Success s) (Success (init s))
+      (Result.Error e) (Error (fmt "Couldn’t connect to %s:%d: %s" host port &e))))
 
   (doc open "opens the connection to Redis on port 6379.
 
@@ -136,14 +135,19 @@ For variable port numbers please check out [`open-on`](#open-on).")
   (defn open [host] (open-on host 6379))
 
   (doc read "reads a `RESP` object from Redis.")
-  (defn read [r] (RESP.from-string &(Socket.read (sock r))))
+  (defn read [r]
+    (match (the (Result String String) (TcpStream.read (sock r)))
+      (Result.Success s) (RESP.from-string &s)
+      (Result.Error e) (Error e)))
+
   (doc send "sends the command `cmd` with the arguments `args` to Redis.")
   (defn send [r cmd args]
-    (let [cmd-parts (copy-map &(fn [x] (Box.init (to-redis @x))) &(Pattern.split #" " &cmd))]
-      (Socket.send (sock r) &(str &(RESP.Arr (concat &[cmd-parts (copy-map &(fn [x] (Box.init @x)) args)]))))))
+    (let [cmd-parts (copy-map &(fn [x] (Box.init (to-redis @x))) &(Pattern.split #" " &cmd))
+          msg (str &(RESP.Arr (concat &[cmd-parts (copy-map &(fn [x] (Box.init @x)) args)])))]
+      (ignore (TcpStream.send (sock r) &msg))))
 
   (doc close "closes the connection to Redis.")
-  (defn close [r] (Socket.close @(sock &r)))
+  (defn close [r] (TcpStream.close @(sock &r)))
 )
 
 (defndynamic rtreat- [s]
