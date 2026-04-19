@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Carp
+        uses: carpentry-org/setup-carp@v1
+
+      - name: Install Redis deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libhiredis-dev
+
+      - name: Install Redis deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install hiredis
+
+      - name: Build example
+        run: |
+          set -euo pipefail
+          carp -b examples/simple.carp
+
+      - name: Generate docs
+        run: carp -x gendocs.carp
