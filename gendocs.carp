@@ -5,7 +5,9 @@
 (Project.config "docs-logo" "")
 (Project.config "docs-url" "https://git.veitheller.de/carpentry/redis")
 (Project.config "docs-styling" "../style.css")
-(Project.config "docs-prelude" "is a Redis client library for Carp, supporting Redis 7.x.
+(Project.config
+  "docs-prelude"
+  "is a Redis client library for Carp, supporting Redis 7.x.
 
 ## Installation
 

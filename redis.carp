@@ -5,8 +5,7 @@
   (Str [String])
   (Err [String])
   (Integer [Int])
-  (Arr [(Array (Box RESP))])
-)
+  (Arr [(Array (Box RESP))]))
 
 (defmodule RESP
   (use-all Array Maybe Pattern Result)
@@ -32,68 +31,73 @@
   (defn decode-one [s pos]
     (if (>= pos (String.length s))
       (Success (Pair.init (Null) pos))
-      (case (String.char-at s pos)
-        \+ (let [rest-start (+ pos 1)
-                 idx (String.index-of-from s \return rest-start)]
-             (if (= idx -1)
-               (Error @"Malformed simple string")
-               (Success (Pair.init
-                 (Str (String.slice s rest-start idx))
-                 (+ idx 2)))))
-        \- (let [rest-start (+ pos 1)
-                 idx (String.index-of-from s \return rest-start)]
-             (if (= idx -1)
-               (Error @"Malformed error string")
-               (Success (Pair.init
-                 (Err (String.slice s rest-start idx))
-                 (+ idx 2)))))
-        \: (let [rest-start (+ pos 1)
-                 idx (String.index-of-from s \return rest-start)]
-             (if (= idx -1)
-               (Error @"Malformed integer")
-               (match (Int.from-string &(String.slice s rest-start idx))
-                 (Maybe.Nothing) (Error @"Could not parse integer in result.")
-                 (Maybe.Just n) (Success (Pair.init
-                   (Integer n)
-                   (+ idx 2))))))
-        \$ (let [rest-start (+ pos 1)
-                 idx (String.index-of-from s \return rest-start)]
-             (if (= idx -1)
-               (Error @"Malformed bulk string")
-               (match (Int.from-string &(String.slice s rest-start idx))
-                 (Maybe.Nothing) (Error @"Error decoding bulk string: does not start with length!")
-                 (Maybe.Just len)
-                   (if (= len -1)
-                     (Success (Pair.init (Null) (+ idx 2)))
-                     (let [data-start (+ idx 2)]
-                       (Success (Pair.init
-                         (Str (String.slice s data-start (+ data-start len)))
-                         (+ data-start (+ len 2)))))))))
-        \* (let [rest-start (+ pos 1)
-                 idx (String.index-of-from s \return rest-start)]
-             (if (= idx -1)
-               (Error @"Malformed array")
-               (match (Int.from-string &(String.slice s rest-start idx))
-                 (Maybe.Nothing) (Error @"Error decoding array: does not start with length!")
-                 (Maybe.Just len)
-                   (if (= len -1)
-                     (Success (Pair.init (Null) (+ idx 2)))
-                     (if (= len 0)
-                       (Success (Pair.init (Arr []) (+ idx 2)))
-                       (let-do [cur (+ idx 2)
-                                a (Array.allocate len)
-                                err @""]
-                         (for [i 0 len]
-                           (match (decode-one s cur)
-                             (Result.Error e) (do (set! err e) (break))
-                             (Result.Success p)
-                               (do
-                                 (aset-uninitialized! &a i (Box.init @(Pair.a &p)))
-                                 (set! cur @(Pair.b &p)))))
-                         (if (= &err "")
-                           (Success (Pair.init (Arr a) cur))
-                           (Error err))))))))
-        (Error (fmt "Malformed RESP data: got %s" &(String.slice s pos (+ pos 1)))))))
+      (case
+        (String.char-at s pos)
+        \+
+        (let [rest-start (+ pos 1)
+              idx (String.index-of-from s \return rest-start)]
+          (if (= idx -1)
+            (Error @"Malformed simple string")
+            (Success (Pair.init (Str (String.slice s rest-start idx)) (+ idx 2)))))
+        \-
+        (let [rest-start (+ pos 1)
+              idx (String.index-of-from s \return rest-start)]
+          (if (= idx -1)
+            (Error @"Malformed error string")
+            (Success (Pair.init (Err (String.slice s rest-start idx)) (+ idx 2)))))
+        \:
+        (let [rest-start (+ pos 1)
+              idx (String.index-of-from s \return rest-start)]
+          (if (= idx -1)
+            (Error @"Malformed integer")
+            (match (Int.from-string &(String.slice s rest-start idx))
+              (Maybe.Nothing) (Error @"Could not parse integer in result.")
+              (Maybe.Just n) (Success (Pair.init (Integer n) (+ idx 2))))))
+        \$
+        (let [rest-start (+ pos 1)
+              idx (String.index-of-from s \return rest-start)]
+          (if (= idx -1)
+            (Error @"Malformed bulk string")
+            (match (Int.from-string &(String.slice s rest-start idx))
+              (Maybe.Nothing)
+                (Error
+                  @"Error decoding bulk string: does not start with length!")
+              (Maybe.Just len)
+                (if (= len -1)
+                  (Success (Pair.init (Null) (+ idx 2)))
+                  (let [data-start (+ idx 2)]
+                    (Success
+                      (Pair.init
+                        (Str (String.slice s data-start (+ data-start len)))
+                        (+ data-start (+ len 2)))))))))
+        \*
+        (let [rest-start (+ pos 1)
+              idx (String.index-of-from s \return rest-start)]
+          (if (= idx -1)
+            (Error @"Malformed array")
+            (match (Int.from-string &(String.slice s rest-start idx))
+              (Maybe.Nothing)
+                (Error @"Error decoding array: does not start with length!")
+              (Maybe.Just len)
+                (if (= len -1)
+                  (Success (Pair.init (Null) (+ idx 2)))
+                  (if (= len 0)
+                    (Success (Pair.init (Arr []) (+ idx 2)))
+                    (let-do [cur (+ idx 2)
+                             a (Array.allocate len)
+                             err @""]
+                      (for [i 0 len]
+                        (match (decode-one s cur)
+                          (Result.Error e) (do (set! err e) (break))
+                          (Result.Success p)
+                            (do
+                              (aset-uninitialized! &a i (Box.init @(Pair.a &p)))
+                              (set! cur @(Pair.b &p)))))
+                      (if (= &err "")
+                        (Success (Pair.init (Arr a) cur))
+                        (Error err))))))))
+        (Error
+          (fmt "Malformed RESP data: got %s" &(String.slice s pos (+ pos 1)))))))
 
   (doc from-string "converts a RESP string into a `RESP` data structure.")
   (defn from-string [s]
@@ -103,22 +107,17 @@
         (Result.Error e) (Error e)
         (Result.Success p) (Success @(Pair.a &p)))))
 
-  (definterface to-redis (Fn [a] RESP))
-)
+  (definterface to-redis (Fn [a] RESP)))
 
 (defmodule String
   (defn to-redis [s] (RESP.Str s))
-  (implements to-redis String.to-redis)
-)
+  (implements to-redis String.to-redis))
 
 (defmodule Int
   (defn to-redis [s] (RESP.Integer s))
-  (implements to-redis Int.to-redis)
-)
+  (implements to-redis Int.to-redis))
 
-(deftype Redis [
-  sock TcpStream
-])
+(deftype Redis [sock TcpStream])
 
 (defmodule Redis
   (use-all Array Result)
@@ -127,7 +126,8 @@
   (defn open-on [host port]
     (match (TcpStream.connect host port)
       (Result.Success s) (Success (init s))
-      (Result.Error e) (Error (fmt "Couldn’t connect to %s:%d: %s" host port &e))))
+      (Result.Error e)
+        (Error (fmt "Couldn’t connect to %s:%d: %s" host port &e))))
 
   (doc open "opens the connection to Redis on port 6379.
 
@@ -142,19 +142,23 @@ For variable port numbers please check out [`open-on`](#open-on).")
 
   (doc send "sends the command `cmd` with the arguments `args` to Redis.")
   (defn send [r cmd args]
-    (let [cmd-parts (copy-map &(fn [x] (Box.init (to-redis @x))) &(Pattern.split #" " &cmd))
-          msg (str &(RESP.Arr (concat &[cmd-parts (copy-map &(fn [x] (Box.init @x)) args)])))]
+    (let [cmd-parts (copy-map
+            &(fn [x] (Box.init (to-redis @x)))
+            &(Pattern.split #" " &cmd))
+          msg (str
+            &(RESP.Arr
+              (concat &[cmd-parts (copy-map &(fn [x] (Box.init @x)) args)])))]
       (ignore (TcpStream.send (sock r) &msg))))
 
   (doc close "closes the connection to Redis.")
-  (defn close [r] (TcpStream.close @(sock &r)))
-)
+  (defn close [r] (TcpStream.close @(sock &r))))
 
 (defndynamic rtreat- [s]
   (let [i (String.index-of s \-)]
     (if (= i -1)
       s
-      (String.concat [(String.prefix s i) " " (rtreat- (String.suffix s (+ i 1)))]))))
+      (String.concat
+        [(String.prefix s i) " " (rtreat- (String.suffix s (+ i 1)))]))))
 
 (defndynamic rconv- [args]
   (if (= (length args) 0)
@@ -163,16 +167,32 @@ For variable port numbers please check out [`open-on`](#open-on).")
 
 (defmacro defredis [cmd :rest args]
   (eval
-    (list 'defmodule 'Redis
-      (list 'doc cmd (String.concat [
-        "is a wrapper around the `" (rtreat- (Symbol.str cmd)) "` Redis command.
+    (list
+      'defmodule
+      'Redis
+      (list
+        'doc
+        cmd
+        (String.concat
+          [
+            "is a wrapper around the `"
+            (rtreat- (Symbol.str cmd))
+            "` Redis command.
 
 It takes the same arguments as the [Redis command](https://redis.io/commands/"
-(Symbol.str cmd) ")."
-      ]))
-      (list 'defn cmd (collect-into (cons 'r args) array)
-        (list 'do
-          (list 'Redis.send 'r (list 'copy (rtreat- (Symbol.str cmd))) (list 'ref (rconv- args)))
+            (Symbol.str cmd)
+            ")."]))
+      (list
+        'defn
+        cmd
+        (collect-into (cons 'r args) array)
+        (list
+          'do
+          (list
+            'Redis.send
+            'r
+            (list 'copy (rtreat- (Symbol.str cmd)))
+            (list 'ref (rconv- args)))
           '(Redis.read r))))))
 
 ; these commands were scraped from redis.io on the 9th of Feb 2020
