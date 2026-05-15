@@ -37,15 +37,15 @@
                   idx (String.index-of-from s \return rest-start)]
               (if (= idx -1)
                 (Error @"Malformed simple string")
-                (Success (Pair.init (Str (String.slice s rest-start idx))
-                    (+ idx 2)))))
+                (Success
+                  (Pair.init (Str (String.slice s rest-start idx)) (+ idx 2)))))
             \-
             (let [rest-start (+ pos 1)
                   idx (String.index-of-from s \return rest-start)]
               (if (= idx -1)
                 (Error @"Malformed error string")
-                (Success (Pair.init (Err (String.slice s rest-start idx))
-                    (+ idx 2)))))
+                (Success
+                  (Pair.init (Err (String.slice s rest-start idx)) (+ idx 2)))))
             \:
             (let [rest-start (+ pos 1)
                   idx (String.index-of-from s \return rest-start)]
@@ -61,14 +61,15 @@
                 (Error @"Malformed bulk string")
                 (match (Int.from-string &(String.slice s rest-start idx))
                   (Maybe.Nothing)
-                    (Error @"Error decoding bulk string: does not start with length!")
+                    (Error
+                      @"Error decoding bulk string: does not start with length!")
                   (Maybe.Just len)
                     (if (= len -1)
                       (Success (Pair.init (Null) (+ idx 2)))
                       (let [data-start (+ idx 2)]
-                        (Success (Pair.init (Str (String.slice s
-                                data-start
-                                (+ data-start len)))
+                        (Success
+                          (Pair.init
+                            (Str (String.slice s data-start (+ data-start len)))
                             (+ data-start (+ len 2)))))))))
             \*
             (let [rest-start (+ pos 1)
@@ -84,22 +85,22 @@
                       (if (= len 0)
                         (Success (Pair.init (Arr []) (+ idx 2)))
                         (let-do [cur (+ idx 2)
-                            a (Array.allocate len)
-                            err @""]
+                                 a (Array.allocate len)
+                                 err @""]
                           (for [i 0 len]
                             (match (decode-one s cur)
                               (Result.Error e) (do (set! err e) (break))
                               (Result.Success p)
                                 (do
                                   (aset-uninitialized! &a
-                                    i
-                                    (Box.init @(Pair.a &p)))
+                                                       i
+                                                       (Box.init @(Pair.a &p)))
                                   (set! cur @(Pair.b &p)))))
                           (if (= &err "")
                             (Success (Pair.init (Arr a) cur))
                             (Error err))))))))
-            (Error (fmt "Malformed RESP data: got %s"
-                     &(String.slice s pos (+ pos 1)))))))
+            (Error
+              (fmt "Malformed RESP data: got %s" &(String.slice s pos (+ pos 1)))))))
 
   (doc from-string "converts a RESP string into a `RESP` data structure.")
   (defn from-string [s]
@@ -145,10 +146,10 @@ For variable port numbers please check out [`open-on`](#open-on).")
   (doc send "sends the command `cmd` with the arguments `args` to Redis.")
   (defn send [r cmd args]
     (let [cmd-parts (copy-map &(fn [x] (Box.init (to-redis @x)))
-            &(Pattern.split #" " &cmd))
-          msg (str &(RESP.Arr (concat &[
-                         cmd-parts
-                         (copy-map &(fn [x] (Box.init @x)) args)])))]
+                              &(Pattern.split #" " &cmd))
+          msg (str
+            &(RESP.Arr
+              (concat &[cmd-parts (copy-map &(fn [x] (Box.init @x)) args)])))]
       (ignore (TcpStream.send (sock r) &msg))))
 
   (doc close "closes the connection to Redis.")
@@ -158,10 +159,8 @@ For variable port numbers please check out [`open-on`](#open-on).")
   (let [i (String.index-of s \-)]
     (if (= i -1)
       s
-      (String.concat [
-          (String.prefix s i)
-          " "
-          (rtreat- (String.suffix s (+ i 1)))]))))
+      (String.concat
+        [(String.prefix s i) " " (rtreat- (String.suffix s (+ i 1)))]))))
 
 (defndynamic rconv- [args]
   (if (= (length args) 0)
@@ -169,26 +168,27 @@ For variable port numbers please check out [`open-on`](#open-on).")
     (cons (list 'to-redis (car args)) (rconv- (cdr args)))))
 
 (defmacro defredis [cmd :rest args]
-  (eval (list 'defmodule
-              'Redis
-              (list 'doc
-                    cmd
-                    (String.concat [
-                        "is a wrapper around the `"
-                        (rtreat- (Symbol.str cmd))
-                        "` Redis command.
+  (eval
+    (list 'defmodule
+          'Redis
+          (list 'doc
+                cmd
+                (String.concat
+                  ["is a wrapper around the `"
+                   (rtreat- (Symbol.str cmd))
+                   "` Redis command.
 
 It takes the same arguments as the [Redis command](https://redis.io/commands/"
-                        (Symbol.str cmd)
-                        ")."]))
-              (list 'defn
-                    cmd
-                    (collect-into (cons 'r args) array)
-                    (list 'do
+                   (Symbol.str cmd)
+                   ")."]))
+          (list 'defn
+                cmd
+                (collect-into (cons 'r args) array)
+                (list 'do
                       (list 'Redis.send
-                        'r
-                        (list 'copy (rtreat- (Symbol.str cmd)))
-                        (list 'ref (rconv- args)))
+                            'r
+                            (list 'copy (rtreat- (Symbol.str cmd)))
+                            (list 'ref (rconv- args)))
                       '(Redis.read r))))))
 
 ; these commands were scraped from redis.io on the 9th of Feb 2020
