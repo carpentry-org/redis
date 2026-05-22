@@ -1,0 +1,465 @@
+(load "../redis.carp")
+(load "Test.carp")
+(use Test)
+
+; ---------------------------------------------------------------------------
+; Helpers
+; ---------------------------------------------------------------------------
+
+(defn decode-ok? [s] (Result.success? &(RESP.from-string s)))
+
+(defn decode-err? [s] (Result.error? &(RESP.from-string s)))
+
+; encode -> decode -> encode; the two encoded strings must match
+(defn roundtrip [r]
+  (let [encoded (str r)]
+    (match (RESP.from-string &encoded)
+      (Result.Success decoded) (str &decoded)
+      (Result.Error e) (fmt "ROUNDTRIP_FAIL: %s" &e))))
+
+; ---------------------------------------------------------------------------
+; Tests
+; ---------------------------------------------------------------------------
+
+(deftest test
+
+  ; =========================================================================
+  ; Encoder — Null
+  ; =========================================================================
+
+  (assert-equal test "$-1\r\n" &(str &(RESP.Null)) "encode Null")
+
+  ; =========================================================================
+  ; Encoder — Str (bulk string format)
+  ; =========================================================================
+
+  (assert-equal test
+    "$5\r\nhello\r\n"
+    &(str &(RESP.Str @"hello"))
+    "encode Str")
+
+  (assert-equal test
+    "$0\r\n\r\n"
+    &(str &(RESP.Str @""))
+    "encode empty Str")
+
+  (assert-equal test
+    "$11\r\nhello world\r\n"
+    &(str &(RESP.Str @"hello world"))
+    "encode Str with space")
+
+  ; =========================================================================
+  ; Encoder — Err (simple error format)
+  ; =========================================================================
+
+  (assert-equal test
+    "-ERR unknown\r\n"
+    &(str &(RESP.Err @"ERR unknown"))
+    "encode Err")
+
+  (assert-equal test "-\r\n" &(str &(RESP.Err @"")) "encode empty Err")
+
+  ; =========================================================================
+  ; Encoder — Integer
+  ; =========================================================================
+
+  (assert-equal test ":42\r\n" &(str &(RESP.Integer 42)) "encode Integer 42")
+
+  (assert-equal test ":0\r\n" &(str &(RESP.Integer 0)) "encode Integer 0")
+
+  (assert-equal test ":-1\r\n" &(str &(RESP.Integer -1)) "encode negative Integer")
+
+  (assert-equal test
+    ":1000000\r\n"
+    &(str &(RESP.Integer 1000000))
+    "encode large Integer")
+
+  ; =========================================================================
+  ; Encoder — Arr
+  ; =========================================================================
+
+  (assert-equal test
+    "*0\r\n"
+    &(str &(RESP.Arr (the (Array (Box RESP)) [])))
+    "encode empty Arr")
+
+  (assert-equal test
+    "*1\r\n$2\r\nhi\r\n"
+    &(str &(RESP.Arr [(Box.init (RESP.Str @"hi"))]))
+    "encode single-element Arr")
+
+  (assert-equal test
+    "*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"
+    &(str &(RESP.Arr [(Box.init (RESP.Str @"foo"))
+                      (Box.init (RESP.Str @"bar"))]))
+    "encode two-element Arr")
+
+  (assert-equal test
+    "*3\r\n$2\r\nhi\r\n:42\r\n$-1\r\n"
+    &(str &(RESP.Arr [(Box.init (RESP.Str @"hi"))
+                      (Box.init (RESP.Integer 42))
+                      (Box.init (RESP.Null))]))
+    "encode mixed-type Arr")
+
+  (assert-equal test
+    "*1\r\n*2\r\n:1\r\n:2\r\n"
+    &(str &(RESP.Arr [(Box.init
+                        (RESP.Arr [(Box.init (RESP.Integer 1))
+                                   (Box.init (RESP.Integer 2))]))]))
+    "encode nested Arr")
+
+  (assert-equal test
+    "*2\r\n*1\r\n$1\r\na\r\n*1\r\n$1\r\nb\r\n"
+    &(str &(RESP.Arr [(Box.init (RESP.Arr [(Box.init (RESP.Str @"a"))]))
+                      (Box.init (RESP.Arr [(Box.init (RESP.Str @"b"))]))]))
+    "encode array of arrays")
+
+  ; =========================================================================
+  ; Decoder — simple strings (+)
+  ; =========================================================================
+
+  (assert-true test
+    (match (RESP.from-string "+OK\r\n")
+      (Result.Success r) (match r (RESP.Str s) (= &s "OK") _ false)
+      _ false)
+    "decode simple string +OK")
+
+  (assert-true test
+    (match (RESP.from-string "+\r\n")
+      (Result.Success r) (match r (RESP.Str s) (= &s "") _ false)
+      _ false)
+    "decode empty simple string")
+
+  (assert-true test
+    (match (RESP.from-string "+hello world\r\n")
+      (Result.Success r) (match r (RESP.Str s) (= &s "hello world") _ false)
+      _ false)
+    "decode simple string with spaces")
+
+  ; =========================================================================
+  ; Decoder — errors (-)
+  ; =========================================================================
+
+  (assert-true test
+    (match (RESP.from-string "-ERR unknown command\r\n")
+      (Result.Success r)
+        (match r (RESP.Err s) (= &s "ERR unknown command") _ false)
+      _ false)
+    "decode error string")
+
+  (assert-true test
+    (match (RESP.from-string "-WRONGTYPE Operation against a key\r\n")
+      (Result.Success r)
+        (match r
+          (RESP.Err s) (= &s "WRONGTYPE Operation against a key")
+          _ false)
+      _ false)
+    "decode long error message")
+
+  ; =========================================================================
+  ; Decoder — integers (:)
+  ; =========================================================================
+
+  (assert-true test
+    (match (RESP.from-string ":42\r\n")
+      (Result.Success r) (match r (RESP.Integer i) (= i 42) _ false)
+      _ false)
+    "decode integer 42")
+
+  (assert-true test
+    (match (RESP.from-string ":0\r\n")
+      (Result.Success r) (match r (RESP.Integer i) (= i 0) _ false)
+      _ false)
+    "decode integer 0")
+
+  (assert-true test
+    (match (RESP.from-string ":-1\r\n")
+      (Result.Success r) (match r (RESP.Integer i) (= i -1) _ false)
+      _ false)
+    "decode negative integer")
+
+  (assert-true test
+    (match (RESP.from-string ":1000000\r\n")
+      (Result.Success r) (match r (RESP.Integer i) (= i 1000000) _ false)
+      _ false)
+    "decode large integer")
+
+  ; =========================================================================
+  ; Decoder — bulk strings ($)
+  ; =========================================================================
+
+  (assert-true test
+    (match (RESP.from-string "$6\r\nfoobar\r\n")
+      (Result.Success r) (match r (RESP.Str s) (= &s "foobar") _ false)
+      _ false)
+    "decode bulk string")
+
+  (assert-true test
+    (match (RESP.from-string "$0\r\n\r\n")
+      (Result.Success r) (match r (RESP.Str s) (= &s "") _ false)
+      _ false)
+    "decode empty bulk string")
+
+  (assert-true test
+    (match (RESP.from-string "$-1\r\n")
+      (Result.Success r) (match r (RESP.Null) true _ false)
+      _ false)
+    "decode null bulk string")
+
+  (assert-true test
+    (match (RESP.from-string "$12\r\nhello\r\nworld\r\n")
+      (Result.Success r)
+        (match r (RESP.Str s) (= &s "hello\r\nworld") _ false)
+      _ false)
+    "decode bulk string containing CRLF")
+
+  ; =========================================================================
+  ; Decoder — arrays (*)
+  ; =========================================================================
+
+  (assert-true test
+    (match (RESP.from-string "*0\r\n")
+      (Result.Success r)
+        (match r (RESP.Arr a) (= (Array.length &a) 0) _ false)
+      _ false)
+    "decode empty array")
+
+  (assert-true test
+    (match (RESP.from-string "*-1\r\n")
+      (Result.Success r) (match r (RESP.Null) true _ false)
+      _ false)
+    "decode null array")
+
+  (assert-true test
+    (match (RESP.from-string "*1\r\n+OK\r\n")
+      (Result.Success r)
+        (match r
+          (RESP.Arr a)
+            (and (= (Array.length &a) 1)
+                 (match @(Box.peek (Array.unsafe-nth &a 0))
+                   (RESP.Str s) (= &s "OK")
+                   _ false))
+          _ false)
+      _ false)
+    "decode single-element array")
+
+  (assert-true test
+    (match (RESP.from-string "*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
+      (Result.Success r)
+        (match r
+          (RESP.Arr a)
+            (and (= (Array.length &a) 2)
+                 (match @(Box.peek (Array.unsafe-nth &a 0))
+                   (RESP.Str s) (= &s "foo")
+                   _ false))
+          _ false)
+      _ false)
+    "decode two bulk strings in array")
+
+  (assert-true test
+    (match (RESP.from-string "*3\r\n:1\r\n:2\r\n:3\r\n")
+      (Result.Success r)
+        (match r
+          (RESP.Arr a)
+            (and (= (Array.length &a) 3)
+                 (match @(Box.peek (Array.unsafe-nth &a 1))
+                   (RESP.Integer i) (= i 2)
+                   _ false))
+          _ false)
+      _ false)
+    "decode integer array, check middle element")
+
+  ; mixed types: simple string, integer, null
+  (assert-true test
+    (match (RESP.from-string "*3\r\n+OK\r\n:42\r\n$-1\r\n")
+      (Result.Success r)
+        (match r
+          (RESP.Arr a)
+            (and (= (Array.length &a) 3)
+                 (and (match @(Box.peek (Array.unsafe-nth &a 0))
+                        (RESP.Str s) (= &s "OK")
+                        _ false)
+                      (and (match @(Box.peek (Array.unsafe-nth &a 1))
+                             (RESP.Integer i) (= i 42)
+                             _ false)
+                           (match @(Box.peek (Array.unsafe-nth &a 2))
+                             (RESP.Null) true
+                             _ false))))
+          _ false)
+      _ false)
+    "decode mixed-type array: Str, Integer, Null")
+
+  ; nested: array of two sub-arrays
+  (assert-true test
+    (match (RESP.from-string "*2\r\n*2\r\n:1\r\n:2\r\n*2\r\n:3\r\n:4\r\n")
+      (Result.Success r)
+        (match r
+          (RESP.Arr outer)
+            (and (= (Array.length &outer) 2)
+                 (and (match @(Box.peek (Array.unsafe-nth &outer 0))
+                        (RESP.Arr inner) (= (Array.length &inner) 2)
+                        _ false)
+                      (match @(Box.peek (Array.unsafe-nth &outer 1))
+                        (RESP.Arr inner) (= (Array.length &inner) 2)
+                        _ false)))
+          _ false)
+      _ false)
+    "decode nested arrays")
+
+  ; deeply nested: [[[:1]]]
+  (assert-true test
+    (match (RESP.from-string "*1\r\n*1\r\n*1\r\n:99\r\n")
+      (Result.Success r)
+        (match r
+          (RESP.Arr l1)
+            (match @(Box.peek (Array.unsafe-nth &l1 0))
+              (RESP.Arr l2)
+                (match @(Box.peek (Array.unsafe-nth &l2 0))
+                  (RESP.Arr l3)
+                    (match @(Box.peek (Array.unsafe-nth &l3 0))
+                      (RESP.Integer i) (= i 99)
+                      _ false)
+                  _ false)
+              _ false)
+          _ false)
+      _ false)
+    "decode three levels of nesting")
+
+  ; array with error element
+  (assert-true test
+    (match (RESP.from-string "*2\r\n-ERR oops\r\n:1\r\n")
+      (Result.Success r)
+        (match r
+          (RESP.Arr a)
+            (and (= (Array.length &a) 2)
+                 (match @(Box.peek (Array.unsafe-nth &a 0))
+                   (RESP.Err s) (= &s "ERR oops")
+                   _ false))
+          _ false)
+      _ false)
+    "decode array containing error element")
+
+  ; =========================================================================
+  ; Edge cases
+  ; =========================================================================
+
+  ; empty input returns Null per from-string
+  (assert-true test
+    (match (RESP.from-string "")
+      (Result.Success r) (match r (RESP.Null) true _ false)
+      _ false)
+    "empty input decodes to Null")
+
+  ; trailing data after first value is ignored by from-string
+  (assert-true test
+    (match (RESP.from-string "+OK\r\n:42\r\n")
+      (Result.Success r) (match r (RESP.Str s) (= &s "OK") _ false)
+      _ false)
+    "trailing data after first value is ignored")
+
+  ; =========================================================================
+  ; Malformed input
+  ; =========================================================================
+
+  (assert-true test (decode-err? "+no crlf") "reject simple string without CRLF")
+
+  (assert-true test (decode-err? "-no crlf") "reject error without CRLF")
+
+  (assert-true test (decode-err? ":no crlf") "reject integer without CRLF")
+
+  (assert-true test
+    (decode-err? ":notanumber\r\n")
+    "reject non-numeric integer")
+
+  (assert-true test
+    (decode-err? "$abc\r\ndata\r\n")
+    "reject bulk string with non-numeric length")
+
+  (assert-true test
+    (decode-err? "$\r\ndata\r\n")
+    "reject bulk string with missing length")
+
+  (assert-true test
+    (decode-err? "*abc\r\n")
+    "reject array with non-numeric count")
+
+  (assert-true test
+    (decode-err? "%garbage\r\n")
+    "reject unknown type prefix")
+
+  (assert-true test
+    (decode-err? "~anything\r\n")
+    "reject another unknown type prefix")
+
+  ; =========================================================================
+  ; Roundtrips — encode then decode then encode must be stable
+  ; =========================================================================
+
+  (assert-equal test
+    "$-1\r\n"
+    &(roundtrip &(RESP.Null))
+    "Null roundtrip")
+
+  (assert-equal test
+    "$5\r\nhello\r\n"
+    &(roundtrip &(RESP.Str @"hello"))
+    "Str roundtrip")
+
+  (assert-equal test
+    "$0\r\n\r\n"
+    &(roundtrip &(RESP.Str @""))
+    "empty Str roundtrip")
+
+  (assert-equal test
+    "-ERR test\r\n"
+    &(roundtrip &(RESP.Err @"ERR test"))
+    "Err roundtrip")
+
+  (assert-equal test
+    ":42\r\n"
+    &(roundtrip &(RESP.Integer 42))
+    "Integer roundtrip")
+
+  (assert-equal test
+    ":-1\r\n"
+    &(roundtrip &(RESP.Integer -1))
+    "negative Integer roundtrip")
+
+  (assert-equal test
+    "*0\r\n"
+    &(roundtrip &(RESP.Arr (the (Array (Box RESP)) [])))
+    "empty Arr roundtrip")
+
+  (assert-equal test
+    "*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"
+    &(roundtrip &(RESP.Arr [(Box.init (RESP.Str @"foo"))
+                            (Box.init (RESP.Str @"bar"))]))
+    "Str Arr roundtrip")
+
+  (assert-equal test
+    "*3\r\n$2\r\nhi\r\n:42\r\n$-1\r\n"
+    &(roundtrip &(RESP.Arr [(Box.init (RESP.Str @"hi"))
+                            (Box.init (RESP.Integer 42))
+                            (Box.init (RESP.Null))]))
+    "mixed Arr roundtrip")
+
+  (assert-equal test
+    "*1\r\n*2\r\n:1\r\n:2\r\n"
+    &(roundtrip &(RESP.Arr [(Box.init
+                              (RESP.Arr [(Box.init (RESP.Integer 1))
+                                         (Box.init (RESP.Integer 2))]))]))
+    "nested Arr roundtrip")
+
+  ; =========================================================================
+  ; to-redis interface
+  ; =========================================================================
+
+  (assert-equal test
+    "$5\r\nhello\r\n"
+    &(str &(String.to-redis @"hello"))
+    "to-redis String")
+
+  (assert-equal test
+    ":42\r\n"
+    &(str &(Int.to-redis 42))
+    "to-redis Int"))
