@@ -10,10 +10,6 @@
 (defmodule RESP
   (use-all Array Maybe Pattern Result)
 
-  (hidden c)
-  (private c)
-  (def c (prn &@&(Arr [(Box.init (Null))])))
-
   (defn str [r]
     (match @r
       (Null) @"$-1\r\n"
