@@ -36,6 +36,12 @@ jobs:
           set -euo pipefail
           carp -b examples/simple.carp
 
+      - name: Run tests
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          carp -x test/resp.carp
+
       - name: Install angler
         run: |
           set -euo pipefail
