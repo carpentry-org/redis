@@ -5,7 +5,7 @@
   (Str [String])
   (Err [String])
   (Integer [Int])
-  (Arr [(Array (Box RESP))]))
+  (Arr [(Array RESP)]))
 
 (defmodule RESP
   (use-all Array Maybe Pattern Result)
@@ -19,7 +19,7 @@
       (Arr a)
         (let-do [parts [(fmt "*%d\r\n" (Array.length &a))]]
           (for [i 0 (Array.length &a)]
-            (Array.push-back! &parts (str (Box.peek (Array.unsafe-nth &a i)))))
+            (Array.push-back! &parts (str (Array.unsafe-nth &a i))))
           (String.concat &parts))))
 
   (hidden decode-one)
@@ -88,9 +88,7 @@
                               (Result.Error e) (do (set! err e) (break))
                               (Result.Success p)
                                 (do
-                                  (aset-uninitialized! &a
-                                                       i
-                                                       (Box.init @(Pair.a &p)))
+                                  (aset-uninitialized! &a i @(Pair.a &p))
                                   (set! cur @(Pair.b &p)))))
                           (if (= &err "")
                             (Success (Pair.init (Arr a) cur))
@@ -141,11 +139,9 @@ For variable port numbers please check out [`open-on`](#open-on).")
 
   (doc send "sends the command `cmd` with the arguments `args` to Redis.")
   (defn send [r cmd args]
-    (let [cmd-parts (copy-map &(fn [x] (Box.init (to-redis @x)))
-                              &(Pattern.split #" " &cmd))
+    (let [cmd-parts (copy-map &(fn [x] (to-redis @x)) &(Pattern.split #" " &cmd))
           msg (str
-            &(RESP.Arr
-              (concat &[cmd-parts (copy-map &(fn [x] (Box.init @x)) args)])))]
+            &(RESP.Arr (concat &[cmd-parts (copy-map &(fn [x] @x) args)])))]
       (ignore (TcpStream.send (sock r) &msg))))
 
   (doc close "closes the connection to Redis.")

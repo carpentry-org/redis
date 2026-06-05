@@ -76,43 +76,33 @@
 
   (assert-equal test
     "*0\r\n"
-    &(str &(RESP.Arr (the (Array (Box RESP)) [])))
+    &(str &(RESP.Arr (the (Array RESP) [])))
     "encode empty Arr")
 
   (assert-equal test
     "*1\r\n$2\r\nhi\r\n"
-    &(str &(RESP.Arr [(Box.init (RESP.Str @"hi"))]))
+    &(str &(RESP.Arr [(RESP.Str @"hi")]))
     "encode single-element Arr")
 
   (assert-equal test
     "*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"
-    &(str
-      &(RESP.Arr [(Box.init (RESP.Str @"foo")) (Box.init (RESP.Str @"bar"))]))
+    &(str &(RESP.Arr [(RESP.Str @"foo") (RESP.Str @"bar")]))
     "encode two-element Arr")
 
   (assert-equal test
     "*3\r\n$2\r\nhi\r\n:42\r\n$-1\r\n"
-    &(str
-      &(RESP.Arr
-        [(Box.init (RESP.Str @"hi"))
-         (Box.init (RESP.Integer 42))
-         (Box.init (RESP.Null))]))
+    &(str &(RESP.Arr [(RESP.Str @"hi") (RESP.Integer 42) (RESP.Null)]))
     "encode mixed-type Arr")
 
   (assert-equal test
     "*1\r\n*2\r\n:1\r\n:2\r\n"
-    &(str
-      &(RESP.Arr
-        [(Box.init
-           (RESP.Arr [(Box.init (RESP.Integer 1)) (Box.init (RESP.Integer 2))]))]))
+    &(str &(RESP.Arr [(RESP.Arr [(RESP.Integer 1) (RESP.Integer 2)])]))
     "encode nested Arr")
 
   (assert-equal test
     "*2\r\n*1\r\n$1\r\na\r\n*1\r\n$1\r\nb\r\n"
     &(str
-      &(RESP.Arr
-        [(Box.init (RESP.Arr [(Box.init (RESP.Str @"a"))]))
-         (Box.init (RESP.Arr [(Box.init (RESP.Str @"b"))]))]))
+      &(RESP.Arr [(RESP.Arr [(RESP.Str @"a")]) (RESP.Arr [(RESP.Str @"b")])]))
     "encode array of arrays")
 
   ; =========================================================================
@@ -233,7 +223,7 @@
         (match r
           (RESP.Arr a)
             (and (= (Array.length &a) 1)
-                 (match @(Box.peek (Array.unsafe-nth &a 0))
+                 (match @(Array.unsafe-nth &a 0)
                    (RESP.Str s) (= &s "OK")
                    _ false))
           _ false)
@@ -246,7 +236,7 @@
         (match r
           (RESP.Arr a)
             (and (= (Array.length &a) 2)
-                 (match @(Box.peek (Array.unsafe-nth &a 0))
+                 (match @(Array.unsafe-nth &a 0)
                    (RESP.Str s) (= &s "foo")
                    _ false))
           _ false)
@@ -259,7 +249,7 @@
         (match r
           (RESP.Arr a)
             (and (= (Array.length &a) 3)
-                 (match @(Box.peek (Array.unsafe-nth &a 1))
+                 (match @(Array.unsafe-nth &a 1)
                    (RESP.Integer i) (= i 2)
                    _ false))
           _ false)
@@ -274,16 +264,14 @@
           (RESP.Arr a)
             (and (= (Array.length &a) 3)
                  (and
-                   (match @(Box.peek (Array.unsafe-nth &a 0))
+                   (match @(Array.unsafe-nth &a 0)
                      (RESP.Str s) (= &s "OK")
                      _ false)
                    (and
-                     (match @(Box.peek (Array.unsafe-nth &a 1))
+                     (match @(Array.unsafe-nth &a 1)
                        (RESP.Integer i) (= i 42)
                        _ false)
-                     (match @(Box.peek (Array.unsafe-nth &a 2))
-                       (RESP.Null) true
-                       _ false))))
+                     (match @(Array.unsafe-nth &a 2) (RESP.Null) true _ false))))
           _ false)
       _ false)
     "decode mixed-type array: Str, Integer, Null")
@@ -296,10 +284,10 @@
           (RESP.Arr outer)
             (and (= (Array.length &outer) 2)
                  (and
-                   (match @(Box.peek (Array.unsafe-nth &outer 0))
+                   (match @(Array.unsafe-nth &outer 0)
                      (RESP.Arr inner) (= (Array.length &inner) 2)
                      _ false)
-                   (match @(Box.peek (Array.unsafe-nth &outer 1))
+                   (match @(Array.unsafe-nth &outer 1)
                      (RESP.Arr inner) (= (Array.length &inner) 2)
                      _ false)))
           _ false)
@@ -312,11 +300,11 @@
       (Result.Success r)
         (match r
           (RESP.Arr l1)
-            (match @(Box.peek (Array.unsafe-nth &l1 0))
+            (match @(Array.unsafe-nth &l1 0)
               (RESP.Arr l2)
-                (match @(Box.peek (Array.unsafe-nth &l2 0))
+                (match @(Array.unsafe-nth &l2 0)
                   (RESP.Arr l3)
-                    (match @(Box.peek (Array.unsafe-nth &l3 0))
+                    (match @(Array.unsafe-nth &l3 0)
                       (RESP.Integer i) (= i 99)
                       _ false)
                   _ false)
@@ -332,7 +320,7 @@
         (match r
           (RESP.Arr a)
             (and (= (Array.length &a) 2)
-                 (match @(Box.peek (Array.unsafe-nth &a 0))
+                 (match @(Array.unsafe-nth &a 0)
                    (RESP.Err s) (= &s "ERR oops")
                    _ false))
           _ false)
@@ -420,30 +408,22 @@
 
   (assert-equal test
     "*0\r\n"
-    &(roundtrip &(RESP.Arr (the (Array (Box RESP)) [])))
+    &(roundtrip &(RESP.Arr (the (Array RESP) [])))
     "empty Arr roundtrip")
 
   (assert-equal test
     "*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"
-    &(roundtrip
-      &(RESP.Arr [(Box.init (RESP.Str @"foo")) (Box.init (RESP.Str @"bar"))]))
+    &(roundtrip &(RESP.Arr [(RESP.Str @"foo") (RESP.Str @"bar")]))
     "Str Arr roundtrip")
 
   (assert-equal test
     "*3\r\n$2\r\nhi\r\n:42\r\n$-1\r\n"
-    &(roundtrip
-      &(RESP.Arr
-        [(Box.init (RESP.Str @"hi"))
-         (Box.init (RESP.Integer 42))
-         (Box.init (RESP.Null))]))
+    &(roundtrip &(RESP.Arr [(RESP.Str @"hi") (RESP.Integer 42) (RESP.Null)]))
     "mixed Arr roundtrip")
 
   (assert-equal test
     "*1\r\n*2\r\n:1\r\n:2\r\n"
-    &(roundtrip
-      &(RESP.Arr
-        [(Box.init
-           (RESP.Arr [(Box.init (RESP.Integer 1)) (Box.init (RESP.Integer 2))]))]))
+    &(roundtrip &(RESP.Arr [(RESP.Arr [(RESP.Integer 1) (RESP.Integer 2)])]))
     "nested Arr roundtrip")
 
   ; =========================================================================
