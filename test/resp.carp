@@ -455,4 +455,111 @@
     &(str &(String.to-redis @"hello"))
     "to-redis String")
 
-  (assert-equal test ":42\r\n" &(str &(Int.to-redis 42)) "to-redis Int"))
+  (assert-equal test ":42\r\n" &(str &(Int.to-redis 42)) "to-redis Int")
+
+  ; =========================================================================
+  ; RESP.decode-n
+  ; =========================================================================
+
+  (assert-true test
+    (let [r (RESP.decode-n "+OK\r\n" 1)]
+      (and (= (Array.length &r) 1)
+           (match @(Array.unsafe-nth &r 0) (RESP.Str s) (= &s "OK") _ false)))
+    "decode-n: single value")
+
+  (assert-true test
+    (let [r (RESP.decode-n "+OK\r\n:42\r\n" 2)]
+      (and (= (Array.length &r) 2)
+           (and
+             (match @(Array.unsafe-nth &r 0) (RESP.Str s) (= &s "OK") _ false)
+             (match @(Array.unsafe-nth &r 1) (RESP.Integer i) (= i 42) _ false))))
+    "decode-n: two values")
+
+  (assert-true test
+    (let [r (RESP.decode-n "+OK\r\n:42\r\n$5\r\nhello\r\n" 3)]
+      (and (= (Array.length &r) 3)
+           (match @(Array.unsafe-nth &r 2) (RESP.Str s) (= &s "hello") _ false)))
+    "decode-n: three mixed values")
+
+  (assert-equal test
+    0
+    (Array.length &(RESP.decode-n "" 5))
+    "decode-n: empty string returns empty array")
+
+  (assert-true test
+    (= (Array.length &(RESP.decode-n "+OK\r\n" 3)) 1)
+    "decode-n: fewer values than requested")
+
+  (assert-true test
+    (let [r (RESP.decode-n "+OK\r\n+PONG\r\n+OK\r\n:100\r\n$3\r\nfoo\r\n" 5)]
+      (= (Array.length &r) 5))
+    "decode-n: five values")
+
+  (assert-true test
+    (let [r (RESP.decode-n "$-1\r\n$-1\r\n" 2)]
+      (and (= (Array.length &r) 2)
+           (and
+             (match @(Array.unsafe-nth &r 0) (RESP.Null) true _ false)
+             (match @(Array.unsafe-nth &r 1) (RESP.Null) true _ false))))
+    "decode-n: multiple nulls")
+
+  (assert-true test
+    (let [r (RESP.decode-n "+OK\r\n+trun" 2)] (= (Array.length &r) 1))
+    "decode-n: truncated second value returns only complete values")
+
+  ; =========================================================================
+  ; Pipeline — buffer construction
+  ; =========================================================================
+
+  (assert-equal test
+    0
+    @(Pipeline.count &(Pipeline.begin))
+    "pipeline begin creates empty pipeline")
+
+  (assert-true test
+    (let-do [p (Pipeline.begin)]
+      (Pipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
+      (= @(Pipeline.count &p) 1))
+    "pipeline add increments count")
+
+  (assert-true test
+    (let-do [p (Pipeline.begin)]
+      (Pipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
+      (Pipeline.add &p @"GET" &[(to-redis @"k")])
+      (= @(Pipeline.count &p) 2))
+    "pipeline add increments count for each command")
+
+  (assert-equal test
+    "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1\r\nv\r\n"
+    (Pipeline.buf
+      &(let-do [p (Pipeline.begin)]
+        (Pipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
+        p))
+    "pipeline add encodes SET as RESP array")
+
+  (assert-equal test
+    "*2\r\n$3\r\nGET\r\n$3\r\nfoo\r\n"
+    (Pipeline.buf
+      &(let-do [p (Pipeline.begin)]
+        (Pipeline.add &p @"GET" &[(to-redis @"foo")])
+        p))
+    "pipeline add encodes GET as RESP array")
+
+  (assert-true test
+    (let-do [p (Pipeline.begin)]
+      (Pipeline.add &p @"SET" &[(to-redis @"a") (to-redis @"1")])
+      (Pipeline.add &p @"SET" &[(to-redis @"b") (to-redis @"2")])
+      (= (Pipeline.buf &p)
+         "*3\r\n$3\r\nSET\r\n$1\r\na\r\n$1\r\n1\r\n*3\r\n$3\r\nSET\r\n$1\r\nb\r\n$1\r\n2\r\n"))
+    "pipeline add concatenates multiple commands")
+
+  (assert-true test
+    (let-do [p (Pipeline.begin)]
+      (Pipeline.add &p @"PING" &(the (Array RESP) []))
+      (= (Pipeline.buf &p) "*1\r\n$4\r\nPING\r\n"))
+    "pipeline add handles command with no args")
+
+  (assert-equal test
+    0
+    (String.length (Pipeline.buf &(Pipeline.begin)))
+    "pipeline begin has empty buffer"))
