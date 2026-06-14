@@ -1,4 +1,4 @@
-(load "git@github.com:carpentry-org/socket@0.1.1")
+(load "git@github.com:carpentry-org/socket@0.2.1")
 
 (deftype RESP
   (Null [])
