@@ -76,25 +76,24 @@
                   (Maybe.Nothing)
                     (Error @"Error decoding array: does not start with length!")
                   (Maybe.Just len)
-                    (if (= len -1)
-                      (Success (Pair.init (Null) (+ idx 2)))
-                      (if (= len 0)
-                        (Success (Pair.init (Arr []) (+ idx 2)))
-                        (let-do [cur (+ idx 2)
-                                 a (Array.allocate len)
-                                 err @""]
-                          (for [i 0 len]
-                            (match (decode-one s cur)
-                              (Result.Error e) (do (set! err e) (break))
-                              (Result.Success p)
-                                (do
-                                  (aset-uninitialized! &a
-                                                       i
-                                                       (Box.init @(Pair.a &p)))
-                                  (set! cur @(Pair.b &p)))))
-                          (if (= &err "")
-                            (Success (Pair.init (Arr a) cur))
-                            (Error err))))))))
+                    (cond
+                      (= len -1) (Success (Pair.init (Null) (+ idx 2)))
+                      (= len 0) (Success (Pair.init (Arr []) (+ idx 2)))
+                      (let-do [cur (+ idx 2)
+                               a (Array.allocate len)
+                               err @""]
+                        (for [i 0 len]
+                          (match (decode-one s cur)
+                            (Result.Error e) (do (set! err e) (break))
+                            (Result.Success p)
+                              (do
+                                (aset-uninitialized! &a
+                                                     i
+                                                     (Box.init @(Pair.a &p)))
+                                (set! cur @(Pair.b &p)))))
+                        (if (= &err "")
+                          (Success (Pair.init (Arr a) cur))
+                          (Error err)))))))
             (Error
               (fmt "Malformed RESP data: got %s" &(String.slice s pos (+ pos 1)))))))
 
