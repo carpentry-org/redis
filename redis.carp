@@ -549,8 +549,9 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 
   (doc add "adds a command to the pipeline.
 
-The command name follows the same convention as the Redis wrapper functions:
-hyphens become spaces, so `@\"client-id\"` sends `CLIENT ID`.")
+The command name must use spaces to separate sub-commands (e.g.
+`@\"CLIENT ID\"`, not `@\"client-id\"`). The [`with-pipeline`](#with-pipeline)
+macro converts hyphens to spaces automatically, but `add` does not.")
   (defn add [p cmd args]
     (let-do [cmd-parts (Array.copy-map &(fn [x] (Box.init (to-redis @x)))
                                        &(Pattern.split #" " &cmd))
