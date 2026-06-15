@@ -508,58 +508,58 @@
     "decode-n: truncated second value returns only complete values")
 
   ; =========================================================================
-  ; Pipeline — buffer construction
+  ; RedisPipeline — buffer construction
   ; =========================================================================
 
   (assert-equal test
     0
-    @(Pipeline.count &(Pipeline.begin))
+    @(RedisPipeline.count &(RedisPipeline.begin))
     "pipeline begin creates empty pipeline")
 
   (assert-true test
-    (let-do [p (Pipeline.begin)]
-      (Pipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
-      (= @(Pipeline.count &p) 1))
+    (let-do [p (RedisPipeline.begin)]
+      (RedisPipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
+      (= @(RedisPipeline.count &p) 1))
     "pipeline add increments count")
 
   (assert-true test
-    (let-do [p (Pipeline.begin)]
-      (Pipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
-      (Pipeline.add &p @"GET" &[(to-redis @"k")])
-      (= @(Pipeline.count &p) 2))
+    (let-do [p (RedisPipeline.begin)]
+      (RedisPipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
+      (RedisPipeline.add &p @"GET" &[(to-redis @"k")])
+      (= @(RedisPipeline.count &p) 2))
     "pipeline add increments count for each command")
 
   (assert-equal test
     "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1\r\nv\r\n"
-    (Pipeline.buf
-      &(let-do [p (Pipeline.begin)]
-        (Pipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
+    (RedisPipeline.buf
+      &(let-do [p (RedisPipeline.begin)]
+        (RedisPipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
         p))
     "pipeline add encodes SET as RESP array")
 
   (assert-equal test
     "*2\r\n$3\r\nGET\r\n$3\r\nfoo\r\n"
-    (Pipeline.buf
-      &(let-do [p (Pipeline.begin)]
-        (Pipeline.add &p @"GET" &[(to-redis @"foo")])
+    (RedisPipeline.buf
+      &(let-do [p (RedisPipeline.begin)]
+        (RedisPipeline.add &p @"GET" &[(to-redis @"foo")])
         p))
     "pipeline add encodes GET as RESP array")
 
   (assert-true test
-    (let-do [p (Pipeline.begin)]
-      (Pipeline.add &p @"SET" &[(to-redis @"a") (to-redis @"1")])
-      (Pipeline.add &p @"SET" &[(to-redis @"b") (to-redis @"2")])
-      (= (Pipeline.buf &p)
+    (let-do [p (RedisPipeline.begin)]
+      (RedisPipeline.add &p @"SET" &[(to-redis @"a") (to-redis @"1")])
+      (RedisPipeline.add &p @"SET" &[(to-redis @"b") (to-redis @"2")])
+      (= (RedisPipeline.buf &p)
          "*3\r\n$3\r\nSET\r\n$1\r\na\r\n$1\r\n1\r\n*3\r\n$3\r\nSET\r\n$1\r\nb\r\n$1\r\n2\r\n"))
     "pipeline add concatenates multiple commands")
 
   (assert-true test
-    (let-do [p (Pipeline.begin)]
-      (Pipeline.add &p @"PING" &(the (Array RESP) []))
-      (= (Pipeline.buf &p) "*1\r\n$4\r\nPING\r\n"))
+    (let-do [p (RedisPipeline.begin)]
+      (RedisPipeline.add &p @"PING" &(the (Array RESP) []))
+      (= (RedisPipeline.buf &p) "*1\r\n$4\r\nPING\r\n"))
     "pipeline add handles command with no args")
 
   (assert-equal test
     0
-    (String.length (Pipeline.buf &(Pipeline.begin)))
+    (String.length (RedisPipeline.buf &(RedisPipeline.begin)))
     "pipeline begin has empty buffer"))

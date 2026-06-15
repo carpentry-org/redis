@@ -540,10 +540,10 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 ; Pipeline support
 ; ---------------------------------------------------------------------------
 
-(deftype Pipeline [buf String
-                   count Int])
+(deftype RedisPipeline [buf String
+                        count Int])
 
-(defmodule Pipeline
+(defmodule RedisPipeline
   (doc begin "creates a new empty pipeline.")
   (defn begin [] (init @"" 0))
 
@@ -586,17 +586,17 @@ hyphens become spaces, so `@\"client-id\"` sends `CLIENT ID`.")
 Returns `(Result (Array RESP) String)` with one RESP value per command,
 in the order they were added.")
   (defn pipeline-exec [r p]
-    (let [n @(Pipeline.count p)]
+    (let [n @(RedisPipeline.count p)]
       (if (= n 0)
         (Result.Success (the (Array RESP) []))
         (do
-          (ignore (TcpStream.send (sock r) (Pipeline.buf p)))
+          (ignore (TcpStream.send (sock r) (RedisPipeline.buf p)))
           (pipeline-read r n))))))
 
 (defndynamic pipeline-cmd- [cmd]
   (let [name (car cmd)
         args (cdr cmd)]
-    (list 'Pipeline.add
+    (list 'RedisPipeline.add
           '(ref __pipeline)
           (list 'copy (rtreat- (Symbol.str name)))
           (list 'ref (collect-into (rconv- args) array)))))
@@ -623,7 +623,7 @@ Returns `(Result (Array RESP) String)`.
 ```")
 (defmacro with-pipeline [r :rest cmds]
   (list 'let
-        (array '__pipeline '(Pipeline.begin))
+        (array '__pipeline '(RedisPipeline.begin))
         (cons-last
           (list 'Redis.pipeline-exec r '(ref __pipeline))
           (cons 'do (pipeline-cmds- cmds)))))
