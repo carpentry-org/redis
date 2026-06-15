@@ -105,6 +105,27 @@
         (Result.Error e) (Error e)
         (Result.Success p) (Success @(Pair.a &p)))))
 
+  (doc decode-n "decodes up to `n` RESP values from string `s`.
+
+Returns an array of the values that could be successfully decoded. If the
+array has fewer than `n` elements, the string did not contain enough
+complete RESP data.")
+  (defn decode-n [s n]
+    (let-do [results []
+             pos 0]
+      (for [i 0 n]
+        (if (>= pos (String.length s))
+          (break)
+          (match (decode-one s pos)
+            (Result.Error _e) (break)
+            (Result.Success p)
+              (if (<= @(Pair.b &p) pos)
+                (break)
+                (do
+                  (Array.push-back! &results @(Pair.a &p))
+                  (set! pos @(Pair.b &p)))))))
+      results))
+
   (definterface to-redis (Fn [a] RESP)))
 
 (defmodule String
@@ -515,10 +536,106 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (defredis client-no-touch mode)
 (defredis waitaof numlocal numreplicas timeout)
 
+; ---------------------------------------------------------------------------
+; Pipeline support
+; ---------------------------------------------------------------------------
+
+(deftype RedisPipeline [buf String
+                        count Int])
+
+(defmodule RedisPipeline
+  (doc begin "creates a new empty pipeline.")
+  (defn begin [] (init @"" 0))
+
+  (doc add "adds a command to the pipeline.
+
+The command name must use spaces to separate sub-commands (e.g.
+`@\"CLIENT ID\"`, not `@\"client-id\"`). The [`with-pipeline`](#with-pipeline)
+macro converts hyphens to spaces automatically, but `add` does not.")
+  (defn add [p cmd args]
+    (let-do [cmd-parts (Array.copy-map &(fn [x] (Box.init (to-redis @x)))
+                                       &(Pattern.split #" " &cmd))
+             msg (str
+               &(RESP.Arr
+                 (Array.concat
+                   &[cmd-parts (Array.copy-map &(fn [x] (Box.init @x)) args)])))]
+      (set-buf! p (String.concat &[@(buf p) msg]))
+      (set-count! p (+ @(count p) 1)))))
+
+(defmodule Redis
+  (hidden pipeline-read)
+  (private pipeline-read)
+  (defn pipeline-read [r n]
+    (let-do [acc @""
+             results (the (Array RESP) [])]
+      (while (< (Array.length &results) (the Int n))
+        (match (the (Result String String) (TcpStream.read (sock r)))
+          (Result.Error e) (do (set! acc e) (break))
+          (Result.Success s)
+            (if (String.empty? &s)
+              (do (set! acc @"connection closed") (break))
+              (do
+                (set! acc (String.concat &[acc s]))
+                (set! results (RESP.decode-n &acc n))))))
+      (if (= (Array.length &results) n)
+        (Result.Success results)
+        (Result.Error acc))))
+
+  (doc pipeline-exec
+    "sends all commands in the pipeline and reads all responses.
+
+Returns `(Result (Array RESP) String)` with one RESP value per command,
+in the order they were added.")
+  (defn pipeline-exec [r p]
+    (let [n @(RedisPipeline.count p)]
+      (if (= n 0)
+        (Result.Success (the (Array RESP) []))
+        (do
+          (ignore (TcpStream.send (sock r) (RedisPipeline.buf p)))
+          (pipeline-read r n))))))
+
+(defndynamic pipeline-cmd- [cmd]
+  (let [name (car cmd)
+        args (cdr cmd)]
+    (list 'RedisPipeline.add
+          '(ref __pipeline)
+          (list 'copy (rtreat- (Symbol.str name)))
+          (list 'ref (collect-into (rconv- args) array)))))
+
+(defndynamic pipeline-cmds- [cmds]
+  (if (= (length cmds) 0)
+    '()
+    (cons (pipeline-cmd- (car cmds)) (pipeline-cmds- (cdr cmds)))))
+
+(doc with-pipeline "batches Redis commands into a single pipeline.
+
+Each form in the body is a command name followed by its arguments, using
+the same naming convention as the individual wrappers (e.g. `set`, `get`,
+`client-id`).
+
+Returns `(Result (Array RESP) String)`.
+
+```
+(with-pipeline &r
+  (set @\"key1\" @\"val1\")
+  (set @\"key2\" @\"val2\")
+  (get @\"key1\")
+  (get @\"key2\"))
+```")
+(defmacro with-pipeline [r :rest cmds]
+  (list 'let
+        (array '__pipeline '(RedisPipeline.begin))
+        (cons-last
+          (list 'Redis.pipeline-exec r '(ref __pipeline))
+          (cons 'do (pipeline-cmds- cmds)))))
+
 (doc Redis "is a wrapper around Redis connections. It supports opening a
 connection using [`open`](#open) or [`open-on`](#open-on), reading from and
 sending to the connection (using [`read`](#read) and [`send`](#send),
 respectively), and contains thin wrappers around all Redis commands through 7.2.
+
+Commands can also be batched using [`pipeline-exec`](#pipeline-exec) or the
+[`with-pipeline`](#with-pipeline) macro to reduce round-trip latency.
 
 ```
 (match (Redis.open \"127.0.0.1\")
@@ -532,9 +649,10 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
 ```")
 (doc RESP "is a wrapper around the [Redis Serialization
 Protocol](https://redis.io/topics/protocol). You can create all types,
-stringify the built types into strings using [`str`](#str), and decode from
-the string protocol using [`from-string`](#from-string). Arrays are fully
-supported, including nested arrays.
+stringify the built types into strings using [`str`](#str), decode single
+values with [`from-string`](#from-string), and decode multiple concatenated
+values with [`decode-n`](#decode-n). Arrays are fully supported, including
+nested arrays.
 
 ```
 ; decoding
