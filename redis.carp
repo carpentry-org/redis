@@ -1,4 +1,5 @@
 (load "git@github.com:carpentry-org/socket@0.2.1")
+(load "git@github.com:carpentry-org/strbuf@0.1.0")
 
 (deftype RESP
   (Null [])
@@ -540,12 +541,12 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 ; Pipeline support
 ; ---------------------------------------------------------------------------
 
-(deftype RedisPipeline [buf String
+(deftype RedisPipeline [buf StringBuf
                         count Int])
 
 (defmodule RedisPipeline
   (doc begin "creates a new empty pipeline.")
-  (defn begin [] (init @"" 0))
+  (defn begin [] (init (StringBuf.create) 0))
 
   (doc add "adds a command to the pipeline.
 
@@ -559,7 +560,7 @@ macro converts hyphens to spaces automatically, but `add` does not.")
                &(RESP.Arr
                  (Array.concat
                    &[cmd-parts (Array.copy-map &(fn [x] (Box.init @x)) args)])))]
-      (set-buf! p (String.concat &[@(buf p) msg]))
+      (StringBuf.append-str (buf p) &msg)
       (set-count! p (+ @(count p) 1)))))
 
 (defmodule Redis
@@ -591,7 +592,8 @@ in the order they were added.")
       (if (= n 0)
         (Result.Success (the (Array RESP) []))
         (do
-          (ignore (TcpStream.send (sock r) (RedisPipeline.buf p)))
+          (ignore
+            (TcpStream.send (sock r) &(StringBuf.str (RedisPipeline.buf p))))
           (pipeline-read r n))))))
 
 (defndynamic pipeline-cmd- [cmd]
