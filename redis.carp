@@ -208,8 +208,6 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
                             (list 'ref (rconv- args)))
                       '(Redis.read r))))))
 
-; these commands were scraped from redis.io on the 9th of Feb 2020
-
 (defredis append key value)
 (defredis auth password)
 (defredis bgrewriteaof)
@@ -452,8 +450,6 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (defredis latency-reset)
 (defredis latency-help)
 
-; commands added in Redis 6.0
-
 (defredis acl-cat)
 (defredis acl-deluser username)
 (defredis acl-genpass)
@@ -472,8 +468,6 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (defredis hello)
 (defredis reset)
 (defredis lpos key element)
-
-; commands added in Redis 6.2
 
 (defredis copy source destination)
 (defredis getdel key)
@@ -494,8 +488,6 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (defredis xautoclaim key group consumer min-idle-time start)
 (defredis xgroup-createconsumer key groupname consumername)
 (defredis xgroup-delconsumer key groupname consumername)
-
-; commands added in Redis 7.0
 
 (defredis function-load library-code)
 (defredis function-delete library-name)
@@ -531,15 +523,9 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
 (defredis latency-histogram)
 (defredis module-loadex path)
 
-; commands added in Redis 7.2
-
 (defredis client-setinfo attr value)
 (defredis client-no-touch mode)
 (defredis waitaof numlocal numreplicas timeout)
-
-; ---------------------------------------------------------------------------
-; Pipeline support
-; ---------------------------------------------------------------------------
 
 (deftype RedisPipeline [buf StringBuf
                         count Int])
