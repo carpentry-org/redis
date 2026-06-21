@@ -4,15 +4,12 @@
   (match (Redis.open "127.0.0.1")
     (Result.Success r)
       (do
-        ; basic connectivity
         (println* &(Redis.ping &r))
         (println* &(Redis.echo &r @"hello from carp!"))
 
-        ; strings
         (println* &(Redis.set &r @"language" @"carp"))
         (println* &(Redis.get &r @"language"))
 
-        ; lists — array responses are proper nested RESP values
         (println* &(Redis.rpush &r @"queue" @"task-a"))
         (println* &(Redis.rpush &r @"queue" @"task-b"))
         (println* &(Redis.rpush &r @"queue" @"task-c"))
@@ -20,29 +17,24 @@
         (println* &(Redis.lpop &r @"queue"))
         (println* &(Redis.llen &r @"queue"))
 
-        ; hashes
         (println* &(Redis.hset &r @"user:1" @"name" @"alice"))
         (println* &(Redis.hset &r @"user:1" @"role" @"admin"))
         (println* &(Redis.hgetall &r @"user:1"))
 
-        ; sets
         (println* &(Redis.sadd &r @"tags" @"functional"))
         (println* &(Redis.sadd &r @"tags" @"systems"))
         (println* &(Redis.sadd &r @"tags" @"compiled"))
         (println* &(Redis.smembers &r @"tags"))
 
-        ; counters
         (println* &(Redis.set &r @"hits" @"0"))
         (println* &(Redis.incr &r @"hits"))
         (println* &(Redis.incrby &r @"hits" @"99"))
         (println* &(Redis.get &r @"hits"))
 
-        ; key expiry
         (println* &(Redis.set &r @"session" @"abc123"))
         (println* &(Redis.expire &r @"session" @"300"))
         (println* &(Redis.ttl &r @"session"))
 
-        ; pattern matching on RESP values
         (match (Redis.lrange &r @"queue" @"0" @"-1")
           (Result.Success resp)
             (match resp
@@ -51,15 +43,13 @@
               _ (println* "unexpected response"))
           (Result.Error e) (println* "error: " &e))
 
-        ; streams — xrange returns nested arrays (array of [id, [field, value, ...]])
+        ; xrange returns nested arrays: array of [id, [field, value, ...]]
         (println* &(Redis.xadd &r @"events" @"*" @"type" @"click"))
         (println* &(Redis.xadd &r @"events" @"*" @"type" @"scroll"))
         (println* &(Redis.xrange &r @"events" @"-" @"+"))
 
-        ; missing key returns Null
         (println* &(Redis.get &r @"nonexistent"))
 
-        ; cleanup
         (println* &(Redis.del &r @"language"))
         (println* &(Redis.del &r @"queue"))
         (println* &(Redis.del &r @"user:1"))
