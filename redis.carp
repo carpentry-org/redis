@@ -154,20 +154,38 @@ complete RESP data.")
 For variable port numbers please check out [`open-on`](#open-on).")
   (defn open [host] (open-on host 6379))
 
-  (doc read "reads a `RESP` object from Redis.")
-  (defn read [r]
-    (match (the (Result String String) (TcpStream.read (sock r)))
-      (Result.Success s) (RESP.from-string &s)
-      (Result.Error e) (Error e)))
+  (doc read "reads a `RESP` object from Redis.
 
-  (doc send "sends the command `cmd` with the arguments `args` to Redis.")
+Accumulates data across multiple socket reads until a complete RESP
+value has been received.")
+  (defn read [r]
+    (let-do [acc @""
+             results (the (Array RESP) [])]
+      (while (< (Array.length &results) 1)
+        (match (the (Result String String) (TcpStream.read (sock r)))
+          (Result.Error e) (do (set! acc e) (break))
+          (Result.Success s)
+            (if (String.empty? &s)
+              (do (set! acc @"connection closed") (break))
+              (do
+                (set! acc (String.concat &[acc s]))
+                (set! results (RESP.decode-n &acc 1))))))
+      (if (= (Array.length &results) 1)
+        (Result.Success @(Array.unsafe-nth &results 0))
+        (Result.Error acc))))
+
+  (doc send "sends the command `cmd` with the arguments `args` to Redis.
+
+Returns `(Result () String)`, propagating any socket errors.")
   (defn send [r cmd args]
     (let [cmd-parts (copy-map &(fn [x] (Box.init (to-redis @x)))
                               &(Pattern.split #" " &cmd))
           msg (str
             &(RESP.Arr
               (concat &[cmd-parts (copy-map &(fn [x] (Box.init @x)) args)])))]
-      (ignore (TcpStream.send (sock r) &msg))))
+      (match (TcpStream.send (sock r) &msg)
+        (Result.Success _n) (Result.Success ())
+        (Result.Error e) (Result.Error e))))
 
   (doc close "closes the connection to Redis.")
   (defn close [r] (TcpStream.close @(sock &r))))
@@ -201,11 +219,14 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
           (list 'defn
                 cmd
                 (collect-into (cons 'r args) array)
-                (list 'do
+                (list 'match
                       (list 'Redis.send
                             'r
                             (list 'copy (rtreat- (Symbol.str cmd)))
                             (list 'ref (rconv- args)))
+                      '(Result.Error e)
+                      '(Result.Error e)
+                      '(Result.Success _)
                       '(Redis.read r))))))
 
 (defredis append key value)
@@ -577,10 +598,9 @@ in the order they were added.")
     (let [n @(RedisPipeline.count p)]
       (if (= n 0)
         (Result.Success (the (Array RESP) []))
-        (do
-          (ignore
-            (TcpStream.send (sock r) &(StringBuf.str (RedisPipeline.buf p))))
-          (pipeline-read r n))))))
+        (match (TcpStream.send (sock r) &(StringBuf.str (RedisPipeline.buf p)))
+          (Result.Error e) (Result.Error e)
+          (Result.Success _) (pipeline-read r n))))))
 
 (defndynamic pipeline-cmd- [cmd]
   (let [name (car cmd)
