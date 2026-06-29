@@ -166,6 +166,36 @@
       _ false)
     "decode bulk string containing CRLF")
 
+  ; RESP bulk strings are binary-safe and the decoder works in byte offsets, so
+  ; it must slice by bytes, not codepoints. With codepoint slicing a value
+  ; containing multi-byte UTF-8 is silently truncated/garbled on decode.
+  (assert-true test
+    (let [encoded (str &(RESP.Str @"naïve café"))]
+      (match (RESP.from-string &encoded)
+        (Result.Success r) (match r (RESP.Str s) (= &s "naïve café") _ false)
+        _ false))
+    "decode bulk string with multi-byte UTF-8 round-trips")
+
+  (assert-true test
+    (let [encoded (str
+            &(RESP.Arr
+              [(Box.init (RESP.Str @"héllo")) (Box.init (RESP.Integer 7))]))]
+      (match (RESP.from-string &encoded)
+        (Result.Success r)
+          (match r
+            (RESP.Arr a)
+              (and (= (Array.length &a) 2)
+                   (and
+                     (match @(Box.peek (Array.unsafe-nth &a 0))
+                       (RESP.Str s) (= &s "héllo")
+                       _ false)
+                     (match @(Box.peek (Array.unsafe-nth &a 1))
+                       (RESP.Integer i) (= i 7)
+                       _ false)))
+            _ false)
+        _ false))
+    "decode array with multi-byte element preserves content")
+
   (assert-true test
     (match (RESP.from-string "*0\r\n")
       (Result.Success r) (match r (RESP.Arr a) (= (Array.length &a) 0) _ false)
