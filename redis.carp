@@ -65,9 +65,17 @@
                     (Error
                       @"Error decoding bulk string: does not start with length!")
                   (Maybe.Just len)
-                    (if (= len -1)
-                      (Success (Pair.init (Null) (+ idx 2)))
-                      (let [data-start (+ idx 2)]
+                    (let [data-start (+ idx 2)
+                          available (- (String.length s) data-start)]
+                      (cond
+                        (= len -1)
+                        (Success (Pair.init (Null) data-start))
+                        (< len 0)
+                        (Error @"Malformed bulk string: negative length")
+                        ; payload + trailing CRLF must be present; comparing len
+                        ; alone avoids overflow on a huge declared length
+                        (> len (- available 2))
+                        (Error @"Incomplete bulk string")
                         (Success
                           (Pair.init
                             (Str

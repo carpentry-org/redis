@@ -462,6 +462,31 @@
     (let [r (RESP.decode-n "+OK\r\n+trun" 2)] (= (Array.length &r) 1))
     "decode-n: truncated second value returns only complete values")
 
+  ; A bulk string whose declared length exceeds the bytes present must not be
+  ; sliced past the buffer. decode-one reports it incomplete (0 results) so
+  ; Redis.read keeps accumulating instead of reading out of bounds.
+  (assert-equal test
+    0
+    (Array.length &(RESP.decode-n "$20\r\nhello" 1))
+    "decode-n: partial bulk string returns no results")
+
+  (assert-equal test
+    0
+    (Array.length &(RESP.decode-n "$100\r\nhi\r\n" 1))
+    "decode-n: bulk length larger than buffer returns no results")
+
+  ; A length near Int max must not overflow the completeness check into a slice.
+  (assert-equal test
+    0
+    (Array.length &(RESP.decode-n "$2147483647\r\nhi\r\n" 1))
+    "decode-n: huge bulk length does not overflow bounds check")
+
+  ; Only $-1 is a valid negative length (null); any other negative is malformed
+  ; and must be rejected rather than driving byte-slice past its start.
+  (assert-true test
+    (decode-err? "$-2\r\nxx\r\n")
+    "reject bulk string with negative length")
+
   (assert-equal test
     0
     @(RedisPipeline.count &(RedisPipeline.begin))
