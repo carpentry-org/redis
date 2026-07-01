@@ -166,6 +166,36 @@
       _ false)
     "decode bulk string containing CRLF")
 
+  ; RESP bulk strings are binary-safe and the decoder works in byte offsets, so
+  ; it must slice by bytes, not codepoints. With codepoint slicing a value
+  ; containing multi-byte UTF-8 is silently truncated/garbled on decode.
+  (assert-true test
+    (let [encoded (str &(RESP.Str @"naïve café"))]
+      (match (RESP.from-string &encoded)
+        (Result.Success r) (match r (RESP.Str s) (= &s "naïve café") _ false)
+        _ false))
+    "decode bulk string with multi-byte UTF-8 round-trips")
+
+  (assert-true test
+    (let [encoded (str
+            &(RESP.Arr
+              [(Box.init (RESP.Str @"héllo")) (Box.init (RESP.Integer 7))]))]
+      (match (RESP.from-string &encoded)
+        (Result.Success r)
+          (match r
+            (RESP.Arr a)
+              (and (= (Array.length &a) 2)
+                   (and
+                     (match @(Box.peek (Array.unsafe-nth &a 0))
+                       (RESP.Str s) (= &s "héllo")
+                       _ false)
+                     (match @(Box.peek (Array.unsafe-nth &a 1))
+                       (RESP.Integer i) (= i 7)
+                       _ false)))
+            _ false)
+        _ false))
+    "decode array with multi-byte element preserves content")
+
   (assert-true test
     (match (RESP.from-string "*0\r\n")
       (Result.Success r) (match r (RESP.Arr a) (= (Array.length &a) 0) _ false)
@@ -431,6 +461,31 @@
   (assert-true test
     (let [r (RESP.decode-n "+OK\r\n+trun" 2)] (= (Array.length &r) 1))
     "decode-n: truncated second value returns only complete values")
+
+  ; A bulk string whose declared length exceeds the bytes present must not be
+  ; sliced past the buffer. decode-one reports it incomplete (0 results) so
+  ; Redis.read keeps accumulating instead of reading out of bounds.
+  (assert-equal test
+    0
+    (Array.length &(RESP.decode-n "$20\r\nhello" 1))
+    "decode-n: partial bulk string returns no results")
+
+  (assert-equal test
+    0
+    (Array.length &(RESP.decode-n "$100\r\nhi\r\n" 1))
+    "decode-n: bulk length larger than buffer returns no results")
+
+  ; A length near Int max must not overflow the completeness check into a slice.
+  (assert-equal test
+    0
+    (Array.length &(RESP.decode-n "$2147483647\r\nhi\r\n" 1))
+    "decode-n: huge bulk length does not overflow bounds check")
+
+  ; Only $-1 is a valid negative length (null); any other negative is malformed
+  ; and must be rejected rather than driving byte-slice past its start.
+  (assert-true test
+    (decode-err? "$-2\r\nxx\r\n")
+    "reject bulk string with negative length")
 
   (assert-equal test
     0

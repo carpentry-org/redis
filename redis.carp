@@ -35,20 +35,24 @@
               (if (= idx -1)
                 (Error @"Malformed simple string")
                 (Success
-                  (Pair.init (Str (String.slice s rest-start idx)) (+ idx 2)))))
+                  (Pair.init
+                    (Str (String.byte-slice s rest-start idx))
+                    (+ idx 2)))))
             \-
             (let [rest-start (+ pos 1)
                   idx (String.index-of-from s \return rest-start)]
               (if (= idx -1)
                 (Error @"Malformed error string")
                 (Success
-                  (Pair.init (Err (String.slice s rest-start idx)) (+ idx 2)))))
+                  (Pair.init
+                    (Err (String.byte-slice s rest-start idx))
+                    (+ idx 2)))))
             \:
             (let [rest-start (+ pos 1)
                   idx (String.index-of-from s \return rest-start)]
               (if (= idx -1)
                 (Error @"Malformed integer")
-                (match (Int.from-string &(String.slice s rest-start idx))
+                (match (Int.from-string &(String.byte-slice s rest-start idx))
                   (Maybe.Nothing) (Error @"Could not parse integer in result.")
                   (Maybe.Just n) (Success (Pair.init (Integer n) (+ idx 2))))))
             \$
@@ -56,24 +60,33 @@
                   idx (String.index-of-from s \return rest-start)]
               (if (= idx -1)
                 (Error @"Malformed bulk string")
-                (match (Int.from-string &(String.slice s rest-start idx))
+                (match (Int.from-string &(String.byte-slice s rest-start idx))
                   (Maybe.Nothing)
                     (Error
                       @"Error decoding bulk string: does not start with length!")
                   (Maybe.Just len)
-                    (if (= len -1)
-                      (Success (Pair.init (Null) (+ idx 2)))
-                      (let [data-start (+ idx 2)]
+                    (let [data-start (+ idx 2)
+                          available (- (String.length s) data-start)]
+                      (cond
+                        (= len -1)
+                        (Success (Pair.init (Null) data-start))
+                        (< len 0)
+                        (Error @"Malformed bulk string: negative length")
+                        ; payload + trailing CRLF must be present; comparing len
+                        ; alone avoids overflow on a huge declared length
+                        (> len (- available 2))
+                        (Error @"Incomplete bulk string")
                         (Success
                           (Pair.init
-                            (Str (String.slice s data-start (+ data-start len)))
+                            (Str
+                              (String.byte-slice s data-start (+ data-start len)))
                             (+ data-start (+ len 2)))))))))
             \*
             (let [rest-start (+ pos 1)
                   idx (String.index-of-from s \return rest-start)]
               (if (= idx -1)
                 (Error @"Malformed array")
-                (match (Int.from-string &(String.slice s rest-start idx))
+                (match (Int.from-string &(String.byte-slice s rest-start idx))
                   (Maybe.Nothing)
                     (Error @"Error decoding array: does not start with length!")
                   (Maybe.Just len)
@@ -96,7 +109,8 @@
                           (Success (Pair.init (Arr a) cur))
                           (Error err)))))))
             (Error
-              (fmt "Malformed RESP data: got %s" &(String.slice s pos (+ pos 1)))))))
+              (fmt "Malformed RESP data: got %s"
+                   &(String.byte-slice s pos (+ pos 1)))))))
 
   (doc from-string "converts a RESP string into a `RESP` data structure.")
   (defn from-string [s]
