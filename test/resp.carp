@@ -348,6 +348,16 @@
     (decode-err? "*abc\r\n")
     "reject array with non-numeric count")
 
+  ; A validly-counted array whose element fails to decode must return a clean
+  ; error, not free the array's still-uninitialized slots (heap corruption).
+  (assert-true test
+    (decode-err? "*3\r\n:1\r\n:notanint\r\n")
+    "reject array with malformed element")
+
+  (assert-true test
+    (decode-err? "*2\r\n:1\r\n*3\r\n:2\r\n:notanint\r\n")
+    "reject nested array with malformed element")
+
   (assert-true test (decode-err? "%garbage\r\n") "reject unknown type prefix")
 
   (assert-true test
