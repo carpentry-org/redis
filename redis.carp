@@ -26,9 +26,7 @@
   (hidden decode-one)
   (private decode-one)
   (defn decode-one [s pos]
-    ; being asked to decode at or past the end of the buffer always means the
-    ; input ran out mid-value: an aggregate declared more elements than are
-    ; present. Report it rather than padding the array with a phantom Null.
+    ; out of input mid-value: error rather than pad the array with a phantom Null
     (if (>= pos (String.length s))
       (Error @"Unexpected end of RESP input")
       (case (String.char-at s pos)
@@ -98,9 +96,8 @@
                       (Success (Pair.init (Null) (+ idx 2)))
                       (= len 0)
                       (Success (Pair.init (Arr []) (+ idx 2)))
-                      ; build incrementally so a mid-array decode failure leaves
-                      ; `a` at its true length; dropping it on the error path
-                      ; then frees only the boxes actually decoded
+                      ; build incrementally so the error path frees only decoded
+                      ; boxes, never uninitialized slots
                       (let-do [cur (+ idx 2)
                                a []
                                err @""]

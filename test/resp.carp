@@ -348,8 +348,6 @@
     (decode-err? "*abc\r\n")
     "reject array with non-numeric count")
 
-  ; A validly-counted array whose element fails to decode must return a clean
-  ; error, not free the array's still-uninitialized slots (heap corruption).
   (assert-true test
     (decode-err? "*3\r\n:1\r\n:notanint\r\n")
     "reject array with malformed element")
@@ -358,34 +356,29 @@
     (decode-err? "*2\r\n:1\r\n*3\r\n:2\r\n:notanint\r\n")
     "reject nested array with malformed element")
 
-  ; A truncated array — one that declares more elements than the buffer holds —
-  ; must return a clean error, not silently pad the tail with phantom Nulls.
   (assert-true test
     (decode-err? "*2\r\n:1\r\n")
-    "reject array with fewer elements than its declared count")
+    "reject array with fewer elements than declared")
 
   (assert-true test
     (decode-err? "*3\r\n:1\r\n:2\r\n")
-    "reject array truncated after the second of three declared elements")
+    "reject array truncated mid-count")
 
   (assert-true test
     (decode-err? "*2\r\n$3\r\nfoo\r\n")
-    "reject array truncated after a complete bulk-string element")
+    "reject array truncated after a bulk string")
 
   (assert-true test
     (decode-err? "*1\r\n*2\r\n:1\r\n")
-    "reject nested array truncated inside the inner array")
+    "reject nested array truncated inside")
 
-  ; The fix is exact: an array with precisely its declared count still decodes,
-  ; and a huge declared count now stops at the first missing element instead of
-  ; building a giant Null-padded array.
   (assert-true test
     (decode-ok? "*2\r\n:1\r\n:2\r\n")
-    "accept array with exactly its declared element count")
+    "accept array with exactly its declared count")
 
   (assert-true test
     (decode-err? "*1000000\r\n:1\r\n")
-    "reject array with a huge declared count and only one element present")
+    "reject huge declared count with one element")
 
   (assert-true test (decode-err? "%garbage\r\n") "reject unknown type prefix")
 
