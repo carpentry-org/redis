@@ -207,6 +207,137 @@ Returns `(Result () String)`, propagating any socket errors.")
   (doc close "closes the connection to Redis.")
   (defn close [r] (TcpStream.close @(sock &r))))
 
+(deftype PubSubMessage
+  (Message [String String])
+  (PMessage [String String String])
+  (Subscribe [String Int])
+  (Unsubscribe [String Int])
+  (PSubscribe [String Int])
+  (PUnsubscribe [String Int]))
+
+(defmodule PubSubMessage
+  (hidden str-at)
+  (private str-at)
+  (defn str-at [a i]
+    (match-ref (Box.peek (Array.unsafe-nth a i))
+      (RESP.Str s) (Result.Success @s)
+      _ (Result.Error @"expected a bulk-string field in pub/sub reply")))
+
+  (hidden int-at)
+  (private int-at)
+  (defn int-at [a i]
+    (match-ref (Box.peek (Array.unsafe-nth a i))
+      (RESP.Integer n) (Result.Success @n)
+      _ (Result.Error @"expected an integer field in pub/sub reply")))
+
+  (hidden decode-sub)
+  (private decode-sub)
+  (defn decode-sub [a n]
+    (if (= n 3)
+      (match (str-at a 1)
+        (Result.Error e) (Result.Error e)
+        (Result.Success name)
+          (match (int-at a 2)
+            (Result.Error e) (Result.Error e)
+            (Result.Success count) (Result.Success (Pair.init name count))))
+      (Result.Error @"malformed subscription reply: expected 3 elements")))
+
+  (hidden decode-plain)
+  (private decode-plain)
+  (defn decode-plain [a n]
+    (if (= n 3)
+      (match (str-at a 1)
+        (Result.Error e) (Result.Error e)
+        (Result.Success channel)
+          (match (str-at a 2)
+            (Result.Error e) (Result.Error e)
+            (Result.Success payload) (Result.Success (Message channel payload))))
+      (Result.Error @"malformed message: expected 3 elements")))
+
+  (hidden decode-pattern)
+  (private decode-pattern)
+  (defn decode-pattern [a n]
+    (if (= n 4)
+      (match (str-at a 1)
+        (Result.Error e) (Result.Error e)
+        (Result.Success pattern)
+          (match (str-at a 2)
+            (Result.Error e) (Result.Error e)
+            (Result.Success channel)
+              (match (str-at a 3)
+                (Result.Error e) (Result.Error e)
+                (Result.Success payload)
+                  (Result.Success (PMessage pattern channel payload)))))
+      (Result.Error @"malformed pmessage: expected 4 elements")))
+
+  (doc decode-message
+    "decodes a pushed pub/sub reply `r` into a `PubSubMessage`.
+
+The reply is expected to be a `RESP.Arr` whose first element is a bulk string
+naming the kind (`message`, `pmessage`, `subscribe`, `unsubscribe`,
+`psubscribe` or `punsubscribe`). Returns an `Error` for any other RESP shape,
+an unknown kind, a wrong element count, or a field of the wrong type.")
+  (defn decode-message [r]
+    (match-ref r
+      (RESP.Arr a)
+        (let [n (Array.length a)]
+          (if (= n 0)
+            (Result.Error @"empty pub/sub reply array")
+            (match-ref (Box.peek (Array.unsafe-nth a 0))
+              (RESP.Str kind)
+                (cond
+                  (= kind "message") (decode-plain a n)
+                  (= kind "pmessage") (decode-pattern a n)
+                  (= kind "subscribe")
+                    (match (decode-sub a n)
+                      (Result.Success p)
+                        (Result.Success (Subscribe @(Pair.a &p) @(Pair.b &p)))
+                      (Result.Error e) (Result.Error e))
+                  (= kind "unsubscribe")
+                    (match (decode-sub a n)
+                      (Result.Success p)
+                        (Result.Success (Unsubscribe @(Pair.a &p) @(Pair.b &p)))
+                      (Result.Error e) (Result.Error e))
+                  (= kind "psubscribe")
+                    (match (decode-sub a n)
+                      (Result.Success p)
+                        (Result.Success (PSubscribe @(Pair.a &p) @(Pair.b &p)))
+                      (Result.Error e) (Result.Error e))
+                  (= kind "punsubscribe")
+                    (match (decode-sub a n)
+                      (Result.Success p)
+                        (Result.Success (PUnsubscribe @(Pair.a &p) @(Pair.b &p)))
+                      (Result.Error e) (Result.Error e))
+                  (Result.Error (fmt "unrecognized pub/sub reply kind: %s" kind)))
+              _ (Result.Error @"pub/sub reply kind is not a bulk string"))))
+      _ (Result.Error @"pub/sub reply is not an array"))))
+
+(defmodule Redis
+  (doc next-message "reads the next pushed pub/sub reply and decodes it.
+
+Blocks until one complete `RESP` value has been received (see [`read`](#read)),
+then pipes it through [`PubSubMessage.decode-message`](#decode-message).
+Propagates read errors and decoding errors as an `Error`.")
+  (defn next-message [r]
+    (match (read r)
+      (Result.Error e) (Result.Error e)
+      (Result.Success resp) (PubSubMessage.decode-message &resp)))
+
+  (doc listen "repeatedly reads pub/sub replies, passing each decoded
+`PubSubMessage` to `callback` until an error occurs.
+
+Loops on [`next-message`](#next-message), invoking `callback` by reference for
+every message, until a read or decode error is returned — e.g. the connection
+is closed. That terminating error is returned to the caller.")
+  (defn listen [r callback]
+    (let-do [err @""
+             running true]
+      (while running
+        (match (next-message r)
+          (Result.Error e) (do (set! err e) (set! running false))
+          (Result.Success msg) (~callback &msg)))
+      (the (Result () String) (Result.Error err)))))
+
 (defndynamic rtreat- [s]
   (let [i (String.index-of s \-)]
     (if (= i -1)
@@ -702,3 +833,23 @@ nested arrays.
 
 If you want your types to be supported when encoding, you’ll have to implement
 the interface `to-redis`, the signature of which is `(Fn [a] RESP))`.")
+(doc PubSubMessage "is the decoded form of a reply pushed to a subscribed
+connection. After [`subscribe`](#subscribe) or [`psubscribe`](#psubscribe),
+read the stream of pushed replies with [`next-message`](#next-message), which
+turns each raw `RESP` value into one of these variants using
+[`decode-message`](#decode-message).
+
+```
+(match (Redis.subscribe &r @\"news\")
+  (Result.Success _)
+    (match (Redis.next-message &r)
+      (Result.Success msg)
+        (match msg
+          (PubSubMessage.Message channel payload)
+            (println* \"got \" &payload \" on \" &channel)
+          (PubSubMessage.Subscribe channel count)
+            (println* \"subscribed to \" &channel)
+          _ (println* \"other pub/sub reply\"))
+      (Result.Error e) (IO.errorln &e))
+  (Result.Error e) (IO.errorln &e))
+```")

@@ -6,6 +6,8 @@
 
 (defn decode-err? [s] (Result.error? &(RESP.from-string s)))
 
+(defn pubsub-err? [r] (Result.error? &(PubSubMessage.decode-message r)))
+
 (defn roundtrip [r]
   (let [encoded (str r)]
     (match (RESP.from-string &encoded)
@@ -572,4 +574,142 @@
   (assert-equal test
     0
     (StringBuf.length (RedisPipeline.buf &(RedisPipeline.begin)))
-    "pipeline begin has empty buffer"))
+    "pipeline begin has empty buffer")
+
+  ; --- pub/sub message decoding ---
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"message"))
+           (Box.init (RESP.Str @"news"))
+           (Box.init (RESP.Str @"hello"))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.Message channel payload)
+            (and (= &channel "news") (= &payload "hello"))
+          _ false)
+      _ false)
+    "decode message reply")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"pmessage"))
+           (Box.init (RESP.Str @"news.*"))
+           (Box.init (RESP.Str @"news.tech"))
+           (Box.init (RESP.Str @"hi"))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.PMessage pattern channel payload)
+            (and (= &pattern "news.*")
+                 (and (= &channel "news.tech") (= &payload "hi")))
+          _ false)
+      _ false)
+    "decode pmessage reply")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"subscribe"))
+           (Box.init (RESP.Str @"news"))
+           (Box.init (RESP.Integer 1))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.Subscribe channel count)
+            (and (= &channel "news") (= count 1))
+          _ false)
+      _ false)
+    "decode subscribe confirmation")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"unsubscribe"))
+           (Box.init (RESP.Str @"news"))
+           (Box.init (RESP.Integer 0))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.Unsubscribe channel count)
+            (and (= &channel "news") (= count 0))
+          _ false)
+      _ false)
+    "decode unsubscribe confirmation")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"psubscribe"))
+           (Box.init (RESP.Str @"news.*"))
+           (Box.init (RESP.Integer 2))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.PSubscribe pattern count)
+            (and (= &pattern "news.*") (= count 2))
+          _ false)
+      _ false)
+    "decode psubscribe confirmation")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"punsubscribe"))
+           (Box.init (RESP.Str @"news.*"))
+           (Box.init (RESP.Integer 0))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.PUnsubscribe pattern count)
+            (and (= &pattern "news.*") (= count 0))
+          _ false)
+      _ false)
+    "decode punsubscribe confirmation")
+
+  (assert-true test
+    (pubsub-err? &(RESP.Str @"message"))
+    "reject non-array pub/sub reply")
+
+  (assert-true test
+    (pubsub-err? &(RESP.Arr (the (Array (Box RESP)) [])))
+    "reject empty pub/sub reply array")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"message")) (Box.init (RESP.Str @"news"))]))
+    "reject message with too few elements")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"pmessage"))
+         (Box.init (RESP.Str @"news.*"))
+         (Box.init (RESP.Str @"news.tech"))]))
+    "reject pmessage with too few elements")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"subscribe"))
+         (Box.init (RESP.Str @"news"))
+         (Box.init (RESP.Str @"notacount"))]))
+    "reject subscribe with non-integer count")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr [(Box.init (RESP.Integer 1)) (Box.init (RESP.Str @"news"))]))
+    "reject pub/sub reply whose kind is not a bulk string")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"bogus"))
+         (Box.init (RESP.Str @"news"))
+         (Box.init (RESP.Str @"x"))]))
+    "reject unrecognized pub/sub reply kind")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"message"))
+         (Box.init (RESP.Str @"news"))
+         (Box.init (RESP.Integer 42))]))
+    "reject message with non-string payload"))
