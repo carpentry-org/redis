@@ -26,8 +26,11 @@
   (hidden decode-one)
   (private decode-one)
   (defn decode-one [s pos]
+    ; being asked to decode at or past the end of the buffer always means the
+    ; input ran out mid-value: an aggregate declared more elements than are
+    ; present. Report it rather than padding the array with a phantom Null.
     (if (>= pos (String.length s))
-      (Success (Pair.init (Null) pos))
+      (Error @"Unexpected end of RESP input")
       (case (String.char-at s pos)
             \+
             (let [rest-start (+ pos 1)
