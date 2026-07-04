@@ -26,8 +26,9 @@
   (hidden decode-one)
   (private decode-one)
   (defn decode-one [s pos]
+    ; out of input mid-value: error rather than pad the array with a phantom Null
     (if (>= pos (String.length s))
-      (Success (Pair.init (Null) pos))
+      (Error @"Unexpected end of RESP input")
       (case (String.char-at s pos)
             \+
             (let [rest-start (+ pos 1)
@@ -91,19 +92,21 @@
                     (Error @"Error decoding array: does not start with length!")
                   (Maybe.Just len)
                     (cond
-                      (= len -1) (Success (Pair.init (Null) (+ idx 2)))
-                      (= len 0) (Success (Pair.init (Arr []) (+ idx 2)))
+                      (= len -1)
+                      (Success (Pair.init (Null) (+ idx 2)))
+                      (= len 0)
+                      (Success (Pair.init (Arr []) (+ idx 2)))
+                      ; build incrementally so the error path frees only decoded
+                      ; boxes, never uninitialized slots
                       (let-do [cur (+ idx 2)
-                               a (Array.allocate len)
+                               a []
                                err @""]
                         (for [i 0 len]
                           (match (decode-one s cur)
                             (Result.Error e) (do (set! err e) (break))
                             (Result.Success p)
                               (do
-                                (aset-uninitialized! &a
-                                                     i
-                                                     (Box.init @(Pair.a &p)))
+                                (Array.push-back! &a (Box.init @(Pair.a &p)))
                                 (set! cur @(Pair.b &p)))))
                         (if (= &err "")
                           (Success (Pair.init (Arr a) cur))

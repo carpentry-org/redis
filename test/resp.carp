@@ -348,6 +348,38 @@
     (decode-err? "*abc\r\n")
     "reject array with non-numeric count")
 
+  (assert-true test
+    (decode-err? "*3\r\n:1\r\n:notanint\r\n")
+    "reject array with malformed element")
+
+  (assert-true test
+    (decode-err? "*2\r\n:1\r\n*3\r\n:2\r\n:notanint\r\n")
+    "reject nested array with malformed element")
+
+  (assert-true test
+    (decode-err? "*2\r\n:1\r\n")
+    "reject array with fewer elements than declared")
+
+  (assert-true test
+    (decode-err? "*3\r\n:1\r\n:2\r\n")
+    "reject array truncated mid-count")
+
+  (assert-true test
+    (decode-err? "*2\r\n$3\r\nfoo\r\n")
+    "reject array truncated after a bulk string")
+
+  (assert-true test
+    (decode-err? "*1\r\n*2\r\n:1\r\n")
+    "reject nested array truncated inside")
+
+  (assert-true test
+    (decode-ok? "*2\r\n:1\r\n:2\r\n")
+    "accept array with exactly its declared count")
+
+  (assert-true test
+    (decode-err? "*1000000\r\n:1\r\n")
+    "reject huge declared count with one element")
+
   (assert-true test (decode-err? "%garbage\r\n") "reject unknown type prefix")
 
   (assert-true test
