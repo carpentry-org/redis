@@ -6,11 +6,35 @@
 
 (defn decode-err? [s] (Result.error? &(RESP.from-string s)))
 
+(defn pubsub-err? [r] (Result.error? &(PubSubMessage.decode-message r)))
+
 (defn roundtrip [r]
   (let [encoded (str r)]
     (match (RESP.from-string &encoded)
       (Result.Success decoded) (str &decoded)
       (Result.Error e) (fmt "ROUNDTRIP_FAIL: %s" &e))))
+
+(defn msg-is? [m ch pl]
+  (match-ref m
+    (PubSubMessage.Message channel payload) (and (= channel ch) (= payload pl))
+    _ false))
+
+; drain every complete pub/sub reply from a buffer the way a buffered read does,
+; so a coalesced batch yields all its messages rather than only the first
+(defn drain-msgs [buffer]
+  (let-do [acc @buffer
+           msgs (the (Array PubSubMessage) [])
+           going true]
+    (while going
+      (match (RESP.decode-first &acc)
+        (Result.Success p)
+          (do
+            (match (PubSubMessage.decode-message (Pair.a &p))
+              (Result.Success m) (Array.push-back! &msgs m)
+              (Result.Error _) (set! going false))
+            (set! acc @(Pair.b &p)))
+        (Result.Error _) (set! going false)))
+    msgs))
 
 (deftest test
   (assert-equal test "$-1\r\n" &(str &(RESP.Null)) "encode Null")
@@ -572,4 +596,227 @@
   (assert-equal test
     0
     (StringBuf.length (RedisPipeline.buf &(RedisPipeline.begin)))
-    "pipeline begin has empty buffer"))
+    "pipeline begin has empty buffer")
+
+  ; --- pub/sub message decoding ---
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"message"))
+           (Box.init (RESP.Str @"news"))
+           (Box.init (RESP.Str @"hello"))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.Message channel payload)
+            (and (= &channel "news") (= &payload "hello"))
+          _ false)
+      _ false)
+    "decode message reply")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"pmessage"))
+           (Box.init (RESP.Str @"news.*"))
+           (Box.init (RESP.Str @"news.tech"))
+           (Box.init (RESP.Str @"hi"))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.PMessage pattern channel payload)
+            (and (= &pattern "news.*")
+                 (and (= &channel "news.tech") (= &payload "hi")))
+          _ false)
+      _ false)
+    "decode pmessage reply")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"subscribe"))
+           (Box.init (RESP.Str @"news"))
+           (Box.init (RESP.Integer 1))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.Subscribe channel count)
+            (and (= &channel "news") (= count 1))
+          _ false)
+      _ false)
+    "decode subscribe confirmation")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"unsubscribe"))
+           (Box.init (RESP.Str @"news"))
+           (Box.init (RESP.Integer 0))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.Unsubscribe channel count)
+            (and (= &channel "news") (= count 0))
+          _ false)
+      _ false)
+    "decode unsubscribe confirmation")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"psubscribe"))
+           (Box.init (RESP.Str @"news.*"))
+           (Box.init (RESP.Integer 2))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.PSubscribe pattern count)
+            (and (= &pattern "news.*") (= count 2))
+          _ false)
+      _ false)
+    "decode psubscribe confirmation")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"punsubscribe"))
+           (Box.init (RESP.Str @"news.*"))
+           (Box.init (RESP.Integer 0))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.PUnsubscribe pattern count)
+            (and (= &pattern "news.*") (= count 0))
+          _ false)
+      _ false)
+    "decode punsubscribe confirmation")
+
+  (assert-true test
+    (pubsub-err? &(RESP.Str @"message"))
+    "reject non-array pub/sub reply")
+
+  (assert-true test
+    (pubsub-err? &(RESP.Arr (the (Array (Box RESP)) [])))
+    "reject empty pub/sub reply array")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"message")) (Box.init (RESP.Str @"news"))]))
+    "reject message with too few elements")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"pmessage"))
+         (Box.init (RESP.Str @"news.*"))
+         (Box.init (RESP.Str @"news.tech"))]))
+    "reject pmessage with too few elements")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"subscribe"))
+         (Box.init (RESP.Str @"news"))
+         (Box.init (RESP.Str @"notacount"))]))
+    "reject subscribe with non-integer count")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr [(Box.init (RESP.Integer 1)) (Box.init (RESP.Str @"news"))]))
+    "reject pub/sub reply whose kind is not a bulk string")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"bogus"))
+         (Box.init (RESP.Str @"news"))
+         (Box.init (RESP.Str @"x"))]))
+    "reject unrecognized pub/sub reply kind")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"message"))
+         (Box.init (RESP.Str @"news"))
+         (Box.init (RESP.Integer 42))]))
+    "reject message with non-string payload")
+
+  ; --- streaming: decode-first reports the unconsumed remainder ---
+  (assert-true test
+    (match (RESP.decode-first "+OK\r\n")
+      (Result.Success p)
+        (and
+          (match-ref (Pair.a &p) (RESP.Str s) (= s "OK") _ false)
+          (= (Pair.b &p) ""))
+      _ false)
+    "decode-first: single value leaves an empty remainder")
+
+  (assert-true test
+    (match (RESP.decode-first "+OK\r\n:42\r\n")
+      (Result.Success p)
+        (and
+          (match-ref (Pair.a &p) (RESP.Str s) (= s "OK") _ false)
+          (= (Pair.b &p) ":42\r\n"))
+      _ false)
+    "decode-first: returns bytes past the first value instead of dropping them")
+
+  (assert-true test
+    (let [rest (match (RESP.decode-first "+OK\r\n:42\r\n")
+            (Result.Success p1) @(Pair.b &p1)
+            (Result.Error _) @"")]
+      (match (RESP.decode-first &rest)
+        (Result.Success p2)
+          (match @(Pair.a &p2) (RESP.Integer i) (= i 42) _ false)
+        (Result.Error _) false))
+    "decode-first: the remainder decodes to the next value")
+
+  (assert-true test
+    (match (RESP.decode-first "+trun") (Result.Error _) true _ false)
+    "decode-first: a value truncated mid-way is an error")
+
+  (assert-true test
+    (match (RESP.decode-first "") (Result.Error _) true _ false)
+    "decode-first: empty input is an error")
+
+  ; two pushed messages that coalesced into one read must both survive — this is
+  ; the drop that PR #10's review found in the pub/sub receive path
+  (assert-true test
+    (let [buffer @"*3\r\n$7\r\nmessage\r\n$4\r\nchan\r\n$5\r\nfirst\r\n*3\r\n$7\r\nmessage\r\n$4\r\nchan\r\n$6\r\nsecond\r\n"
+          msgs (drain-msgs &buffer)]
+      (and (= (Array.length &msgs) 2)
+           (and
+             (msg-is? (Array.unsafe-nth &msgs 0) "chan" "first")
+             (msg-is? (Array.unsafe-nth &msgs 1) "chan" "second"))))
+    "two coalesced messages in one buffer both decode (none dropped)")
+
+  ; --- Null name field on an unsubscribe-all / punsubscribe-all reply ---
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"unsubscribe"))
+           (Box.init (RESP.Null))
+           (Box.init (RESP.Integer 0))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.Unsubscribe channel count)
+            (and (= &channel "") (= count 0))
+          _ false)
+      _ false)
+    "unsubscribe-all reply with Null channel decodes to an empty channel")
+
+  (assert-true test
+    (match (PubSubMessage.decode-message
+        &(RESP.Arr
+          [(Box.init (RESP.Str @"punsubscribe"))
+           (Box.init (RESP.Null))
+           (Box.init (RESP.Integer 0))]))
+      (Result.Success m)
+        (match m
+          (PubSubMessage.PUnsubscribe pattern count)
+            (and (= &pattern "") (= count 0))
+          _ false)
+      _ false)
+    "punsubscribe-all reply with Null pattern decodes to an empty name")
+
+  (assert-true test
+    (pubsub-err?
+      &(RESP.Arr
+        [(Box.init (RESP.Str @"message"))
+         (Box.init (RESP.Null))
+         (Box.init (RESP.Str @"payload"))]))
+    "message reply with a Null channel is still rejected"))

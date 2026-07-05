@@ -52,6 +52,31 @@ The library provides thin wrappers around all standard Redis commands through
 The RESP type supports recursive arrays via `Box`, so nested structures
 (e.g. from `XRANGE` or `COMMAND`) are decoded faithfully.
 
+### Pub/sub
+
+After subscribing you can receive the stream of pushed messages with
+`Redis.next-message`, which decodes each reply into a typed `PubSubMessage`:
+
+```clojure
+(match (Redis.subscribe &r @"news")
+  (Result.Success _)
+    (match (Redis.next-message &r)
+      (Result.Success msg)
+        (match msg
+          (PubSubMessage.Message channel payload)
+            (println* "got " &payload " on " &channel)
+          (PubSubMessage.Subscribe channel count)
+            (println* "subscribed to " &channel)
+          _ (println* "other pub/sub reply"))
+      (Result.Error e) (IO.errorln &e))
+  (Result.Error e) (IO.errorln &e))
+```
+
+`PubSubMessage` covers `Message`, `PMessage` (pattern subscriptions), and the
+`Subscribe`/`Unsubscribe`/`PSubscribe`/`PUnsubscribe` confirmations. To keep
+processing messages in a loop, hand `Redis.listen` a callback — it runs until
+the connection errors out.
+
 Full API documentation lives [here](https://veitheller.de/redis).
 
 More examples are in the [`examples`](./examples) directory.

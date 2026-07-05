@@ -144,6 +144,22 @@ complete RESP data.")
                   (set! pos @(Pair.b &p)))))))
       results))
 
+  (doc decode-first "decodes the first complete RESP value from `s`.
+
+Returns that value paired with the remaining, still-unconsumed suffix of `s`.
+Unlike [`decode-n`](#decode-n), it reports the leftover bytes, so a caller
+streaming from a socket can keep a partial trailing value — or a whole value
+that coalesced into the same read — buffered until it is needed. Returns an
+`Error` if `s` does not begin with a complete RESP value, either because the
+input is malformed or because a value is truncated mid-way.")
+  (defn decode-first [s]
+    (match (decode-one s 0)
+      (Result.Error e) (Result.Error e)
+      (Result.Success p)
+        (Result.Success
+          (Pair.init @(Pair.a &p)
+                     (String.byte-slice s @(Pair.b &p) (String.length s))))))
+
   (definterface to-redis (Fn [a] RESP)))
 
 (defmodule String
@@ -154,7 +170,8 @@ complete RESP data.")
   (defn to-redis [s] (RESP.Integer s))
   (implements to-redis Int.to-redis))
 
-(deftype Redis [sock TcpStream])
+(deftype Redis [sock TcpStream
+                buf String])
 
 (defmodule Redis
   (use-all Array Result)
@@ -162,7 +179,7 @@ complete RESP data.")
   (doc open-on "opens the connection to Redis on port `port`.")
   (defn open-on [host port]
     (match (TcpStream.connect host port)
-      (Result.Success s) (Success (init s))
+      (Result.Success s) (Success (init s @""))
       (Result.Error e)
         (Error (fmt "Couldn’t connect to %s:%d: %s" host port &e))))
 
@@ -171,25 +188,45 @@ complete RESP data.")
 For variable port numbers please check out [`open-on`](#open-on).")
   (defn open [host] (open-on host 6379))
 
-  (doc read "reads a `RESP` object from Redis.
+  (hidden read-n)
+  (private read-n)
+  (doc read-n "reads exactly `n` complete `RESP` values from the connection.
 
-Accumulates data across multiple socket reads until a complete RESP
-value has been received.")
+Decodes out of the connection's own read buffer first, pulling more from the
+socket only when it does not yet hold `n` complete values. Any bytes past the
+`n`th value — a following reply that arrived in the same read — are stored back
+on the connection so a later read can consume them instead of losing them.")
+  (defn read-n [r n]
+    (let-do [acc @(buf r)
+             results (the (Array RESP) [])
+             err @""
+             reading true]
+      (while (and reading (< (Array.length &results) (the Int n)))
+        (match (RESP.decode-first &acc)
+          (Result.Success p)
+            (do (Array.push-back! &results @(Pair.a &p)) (set! acc @(Pair.b &p)))
+          (Result.Error _)
+            (match (the (Result String String) (TcpStream.read (sock r)))
+              (Result.Error e) (do (set! err e) (set! reading false))
+              (Result.Success s)
+                (if (String.empty? &s)
+                  (do (set! err @"connection closed") (set! reading false))
+                  (set! acc (String.concat &[acc s]))))))
+      (set-buf! r acc)
+      (if (= (Array.length &results) (the Int n))
+        (Result.Success results)
+        (Result.Error err))))
+
+  (doc read "reads a single `RESP` object from Redis.
+
+Accumulates data across multiple socket reads until a complete RESP value has
+been received. Any extra bytes read past that value — for example a pushed
+pub/sub reply that coalesced into the same packet — are retained on the
+connection for the next [`read`](#read), so no reply is ever dropped.")
   (defn read [r]
-    (let-do [acc @""
-             results (the (Array RESP) [])]
-      (while (< (Array.length &results) 1)
-        (match (the (Result String String) (TcpStream.read (sock r)))
-          (Result.Error e) (do (set! acc e) (break))
-          (Result.Success s)
-            (if (String.empty? &s)
-              (do (set! acc @"connection closed") (break))
-              (do
-                (set! acc (String.concat &[acc s]))
-                (set! results (RESP.decode-n &acc 1))))))
-      (if (= (Array.length &results) 1)
-        (Result.Success @(Array.unsafe-nth &results 0))
-        (Result.Error acc))))
+    (match (read-n r 1)
+      (Result.Success rs) (Result.Success @(Array.unsafe-nth &rs 0))
+      (Result.Error e) (Result.Error e)))
 
   (doc send "sends the command `cmd` with the arguments `args` to Redis.
 
@@ -206,6 +243,150 @@ Returns `(Result () String)`, propagating any socket errors.")
 
   (doc close "closes the connection to Redis.")
   (defn close [r] (TcpStream.close @(sock &r))))
+
+(deftype PubSubMessage
+  (Message [String String])
+  (PMessage [String String String])
+  (Subscribe [String Int])
+  (Unsubscribe [String Int])
+  (PSubscribe [String Int])
+  (PUnsubscribe [String Int]))
+
+(defmodule PubSubMessage
+  (hidden str-at)
+  (private str-at)
+  (defn str-at [a i]
+    (match-ref (Box.peek (Array.unsafe-nth a i))
+      (RESP.Str s) (Result.Success @s)
+      _ (Result.Error @"expected a bulk-string field in pub/sub reply")))
+
+  (hidden int-at)
+  (private int-at)
+  (defn int-at [a i]
+    (match-ref (Box.peek (Array.unsafe-nth a i))
+      (RESP.Integer n) (Result.Success @n)
+      _ (Result.Error @"expected an integer field in pub/sub reply")))
+
+  (hidden name-at)
+  (private name-at)
+  ; the channel/pattern field of an (un)subscribe reply is Null when the client
+  ; (un)subscribed from every channel at once; accept that as an empty name so a
+  ; routine unsubscribe-all reply decodes cleanly instead of terminating listen
+  (defn name-at [a i]
+    (match-ref (Box.peek (Array.unsafe-nth a i))
+      (RESP.Str s) (Result.Success @s)
+      (RESP.Null) (Result.Success @"")
+      _
+        (Result.Error
+          @"expected a bulk-string or null name field in pub/sub reply")))
+
+  (hidden decode-sub)
+  (private decode-sub)
+  (defn decode-sub [a n]
+    (if (= n 3)
+      (match (name-at a 1)
+        (Result.Error e) (Result.Error e)
+        (Result.Success name)
+          (match (int-at a 2)
+            (Result.Error e) (Result.Error e)
+            (Result.Success count) (Result.Success (Pair.init name count))))
+      (Result.Error @"malformed subscription reply: expected 3 elements")))
+
+  (hidden decode-plain)
+  (private decode-plain)
+  (defn decode-plain [a n]
+    (if (= n 3)
+      (match (str-at a 1)
+        (Result.Error e) (Result.Error e)
+        (Result.Success channel)
+          (match (str-at a 2)
+            (Result.Error e) (Result.Error e)
+            (Result.Success payload) (Result.Success (Message channel payload))))
+      (Result.Error @"malformed message: expected 3 elements")))
+
+  (hidden decode-pattern)
+  (private decode-pattern)
+  (defn decode-pattern [a n]
+    (if (= n 4)
+      (match (str-at a 1)
+        (Result.Error e) (Result.Error e)
+        (Result.Success pattern)
+          (match (str-at a 2)
+            (Result.Error e) (Result.Error e)
+            (Result.Success channel)
+              (match (str-at a 3)
+                (Result.Error e) (Result.Error e)
+                (Result.Success payload)
+                  (Result.Success (PMessage pattern channel payload)))))
+      (Result.Error @"malformed pmessage: expected 4 elements")))
+
+  (doc decode-message
+    "decodes a pushed pub/sub reply `r` into a `PubSubMessage`.
+
+The reply is expected to be a `RESP.Arr` whose first element is a bulk string
+naming the kind (`message`, `pmessage`, `subscribe`, `unsubscribe`,
+`psubscribe` or `punsubscribe`). Returns an `Error` for any other RESP shape,
+an unknown kind, a wrong element count, or a field of the wrong type.")
+  (defn decode-message [r]
+    (match-ref r
+      (RESP.Arr a)
+        (let [n (Array.length a)]
+          (if (= n 0)
+            (Result.Error @"empty pub/sub reply array")
+            (match-ref (Box.peek (Array.unsafe-nth a 0))
+              (RESP.Str kind)
+                (cond
+                  (= kind "message") (decode-plain a n)
+                  (= kind "pmessage") (decode-pattern a n)
+                  (= kind "subscribe")
+                    (match (decode-sub a n)
+                      (Result.Success p)
+                        (Result.Success (Subscribe @(Pair.a &p) @(Pair.b &p)))
+                      (Result.Error e) (Result.Error e))
+                  (= kind "unsubscribe")
+                    (match (decode-sub a n)
+                      (Result.Success p)
+                        (Result.Success (Unsubscribe @(Pair.a &p) @(Pair.b &p)))
+                      (Result.Error e) (Result.Error e))
+                  (= kind "psubscribe")
+                    (match (decode-sub a n)
+                      (Result.Success p)
+                        (Result.Success (PSubscribe @(Pair.a &p) @(Pair.b &p)))
+                      (Result.Error e) (Result.Error e))
+                  (= kind "punsubscribe")
+                    (match (decode-sub a n)
+                      (Result.Success p)
+                        (Result.Success (PUnsubscribe @(Pair.a &p) @(Pair.b &p)))
+                      (Result.Error e) (Result.Error e))
+                  (Result.Error (fmt "unrecognized pub/sub reply kind: %s" kind)))
+              _ (Result.Error @"pub/sub reply kind is not a bulk string"))))
+      _ (Result.Error @"pub/sub reply is not an array"))))
+
+(defmodule Redis
+  (doc next-message "reads the next pushed pub/sub reply and decodes it.
+
+Blocks until one complete `RESP` value has been received (see [`read`](#read)),
+then pipes it through [`PubSubMessage.decode-message`](#decode-message).
+Propagates read errors and decoding errors as an `Error`.")
+  (defn next-message [r]
+    (match (read r)
+      (Result.Error e) (Result.Error e)
+      (Result.Success resp) (PubSubMessage.decode-message &resp)))
+
+  (doc listen "repeatedly reads pub/sub replies, passing each decoded
+`PubSubMessage` to `callback` until an error occurs.
+
+Loops on [`next-message`](#next-message), invoking `callback` by reference for
+every message, until a read or decode error is returned — e.g. the connection
+is closed. That terminating error is returned to the caller.")
+  (defn listen [r callback]
+    (let-do [err @""
+             running true]
+      (while running
+        (match (next-message r)
+          (Result.Error e) (do (set! err e) (set! running false))
+          (Result.Success msg) (~callback &msg)))
+      (the (Result () String) (Result.Error err)))))
 
 (defndynamic rtreat- [s]
   (let [i (String.index-of s \-)]
@@ -588,24 +769,6 @@ macro converts hyphens to spaces automatically, but `add` does not.")
       (set-count! p (+ @(count p) 1)))))
 
 (defmodule Redis
-  (hidden pipeline-read)
-  (private pipeline-read)
-  (defn pipeline-read [r n]
-    (let-do [acc @""
-             results (the (Array RESP) [])]
-      (while (< (Array.length &results) (the Int n))
-        (match (the (Result String String) (TcpStream.read (sock r)))
-          (Result.Error e) (do (set! acc e) (break))
-          (Result.Success s)
-            (if (String.empty? &s)
-              (do (set! acc @"connection closed") (break))
-              (do
-                (set! acc (String.concat &[acc s]))
-                (set! results (RESP.decode-n &acc n))))))
-      (if (= (Array.length &results) n)
-        (Result.Success results)
-        (Result.Error acc))))
-
   (doc pipeline-exec
     "sends all commands in the pipeline and reads all responses.
 
@@ -617,7 +780,7 @@ in the order they were added.")
         (Result.Success (the (Array RESP) []))
         (match (TcpStream.send (sock r) &(StringBuf.str (RedisPipeline.buf p)))
           (Result.Error e) (Result.Error e)
-          (Result.Success _) (pipeline-read r n))))))
+          (Result.Success _) (read-n r n))))))
 
 (defndynamic pipeline-cmd- [cmd]
   (let [name (car cmd)
@@ -702,3 +865,23 @@ nested arrays.
 
 If you want your types to be supported when encoding, you’ll have to implement
 the interface `to-redis`, the signature of which is `(Fn [a] RESP))`.")
+(doc PubSubMessage "is the decoded form of a reply pushed to a subscribed
+connection. After [`subscribe`](#subscribe) or [`psubscribe`](#psubscribe),
+read the stream of pushed replies with [`next-message`](#next-message), which
+turns each raw `RESP` value into one of these variants using
+[`decode-message`](#decode-message).
+
+```
+(match (Redis.subscribe &r @\"news\")
+  (Result.Success _)
+    (match (Redis.next-message &r)
+      (Result.Success msg)
+        (match msg
+          (PubSubMessage.Message channel payload)
+            (println* \"got \" &payload \" on \" &channel)
+          (PubSubMessage.Subscribe channel count)
+            (println* \"subscribed to \" &channel)
+          _ (println* \"other pub/sub reply\"))
+      (Result.Error e) (IO.errorln &e))
+  (Result.Error e) (IO.errorln &e))
+```")
