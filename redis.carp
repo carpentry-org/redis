@@ -144,6 +144,22 @@ complete RESP data.")
                   (set! pos @(Pair.b &p)))))))
       results))
 
+  (doc decode-first "decodes the first complete RESP value from `s`.
+
+Returns that value paired with the remaining, still-unconsumed suffix of `s`.
+Unlike [`decode-n`](#decode-n), it reports the leftover bytes, so a caller
+streaming from a socket can keep a partial trailing value — or a whole value
+that coalesced into the same read — buffered until it is needed. Returns an
+`Error` if `s` does not begin with a complete RESP value, either because the
+input is malformed or because a value is truncated mid-way.")
+  (defn decode-first [s]
+    (match (decode-one s 0)
+      (Result.Error e) (Result.Error e)
+      (Result.Success p)
+        (Result.Success
+          (Pair.init @(Pair.a &p)
+                     (String.byte-slice s @(Pair.b &p) (String.length s))))))
+
   (definterface to-redis (Fn [a] RESP)))
 
 (defmodule String
@@ -154,7 +170,8 @@ complete RESP data.")
   (defn to-redis [s] (RESP.Integer s))
   (implements to-redis Int.to-redis))
 
-(deftype Redis [sock TcpStream])
+(deftype Redis [sock TcpStream
+                buf String])
 
 (defmodule Redis
   (use-all Array Result)
@@ -162,7 +179,7 @@ complete RESP data.")
   (doc open-on "opens the connection to Redis on port `port`.")
   (defn open-on [host port]
     (match (TcpStream.connect host port)
-      (Result.Success s) (Success (init s))
+      (Result.Success s) (Success (init s @""))
       (Result.Error e)
         (Error (fmt "Couldn’t connect to %s:%d: %s" host port &e))))
 
@@ -171,25 +188,45 @@ complete RESP data.")
 For variable port numbers please check out [`open-on`](#open-on).")
   (defn open [host] (open-on host 6379))
 
-  (doc read "reads a `RESP` object from Redis.
+  (hidden read-n)
+  (private read-n)
+  (doc read-n "reads exactly `n` complete `RESP` values from the connection.
 
-Accumulates data across multiple socket reads until a complete RESP
-value has been received.")
+Decodes out of the connection's own read buffer first, pulling more from the
+socket only when it does not yet hold `n` complete values. Any bytes past the
+`n`th value — a following reply that arrived in the same read — are stored back
+on the connection so a later read can consume them instead of losing them.")
+  (defn read-n [r n]
+    (let-do [acc @(buf r)
+             results (the (Array RESP) [])
+             err @""
+             reading true]
+      (while (and reading (< (Array.length &results) (the Int n)))
+        (match (RESP.decode-first &acc)
+          (Result.Success p)
+            (do (Array.push-back! &results @(Pair.a &p)) (set! acc @(Pair.b &p)))
+          (Result.Error _)
+            (match (the (Result String String) (TcpStream.read (sock r)))
+              (Result.Error e) (do (set! err e) (set! reading false))
+              (Result.Success s)
+                (if (String.empty? &s)
+                  (do (set! err @"connection closed") (set! reading false))
+                  (set! acc (String.concat &[acc s]))))))
+      (set-buf! r acc)
+      (if (= (Array.length &results) (the Int n))
+        (Result.Success results)
+        (Result.Error err))))
+
+  (doc read "reads a single `RESP` object from Redis.
+
+Accumulates data across multiple socket reads until a complete RESP value has
+been received. Any extra bytes read past that value — for example a pushed
+pub/sub reply that coalesced into the same packet — are retained on the
+connection for the next [`read`](#read), so no reply is ever dropped.")
   (defn read [r]
-    (let-do [acc @""
-             results (the (Array RESP) [])]
-      (while (< (Array.length &results) 1)
-        (match (the (Result String String) (TcpStream.read (sock r)))
-          (Result.Error e) (do (set! acc e) (break))
-          (Result.Success s)
-            (if (String.empty? &s)
-              (do (set! acc @"connection closed") (break))
-              (do
-                (set! acc (String.concat &[acc s]))
-                (set! results (RESP.decode-n &acc 1))))))
-      (if (= (Array.length &results) 1)
-        (Result.Success @(Array.unsafe-nth &results 0))
-        (Result.Error acc))))
+    (match (read-n r 1)
+      (Result.Success rs) (Result.Success @(Array.unsafe-nth &rs 0))
+      (Result.Error e) (Result.Error e)))
 
   (doc send "sends the command `cmd` with the arguments `args` to Redis.
 
@@ -230,11 +267,24 @@ Returns `(Result () String)`, propagating any socket errors.")
       (RESP.Integer n) (Result.Success @n)
       _ (Result.Error @"expected an integer field in pub/sub reply")))
 
+  (hidden name-at)
+  (private name-at)
+  ; the channel/pattern field of an (un)subscribe reply is Null when the client
+  ; (un)subscribed from every channel at once; accept that as an empty name so a
+  ; routine unsubscribe-all reply decodes cleanly instead of terminating listen
+  (defn name-at [a i]
+    (match-ref (Box.peek (Array.unsafe-nth a i))
+      (RESP.Str s) (Result.Success @s)
+      (RESP.Null) (Result.Success @"")
+      _
+        (Result.Error
+          @"expected a bulk-string or null name field in pub/sub reply")))
+
   (hidden decode-sub)
   (private decode-sub)
   (defn decode-sub [a n]
     (if (= n 3)
-      (match (str-at a 1)
+      (match (name-at a 1)
         (Result.Error e) (Result.Error e)
         (Result.Success name)
           (match (int-at a 2)
@@ -719,24 +769,6 @@ macro converts hyphens to spaces automatically, but `add` does not.")
       (set-count! p (+ @(count p) 1)))))
 
 (defmodule Redis
-  (hidden pipeline-read)
-  (private pipeline-read)
-  (defn pipeline-read [r n]
-    (let-do [acc @""
-             results (the (Array RESP) [])]
-      (while (< (Array.length &results) (the Int n))
-        (match (the (Result String String) (TcpStream.read (sock r)))
-          (Result.Error e) (do (set! acc e) (break))
-          (Result.Success s)
-            (if (String.empty? &s)
-              (do (set! acc @"connection closed") (break))
-              (do
-                (set! acc (String.concat &[acc s]))
-                (set! results (RESP.decode-n &acc n))))))
-      (if (= (Array.length &results) n)
-        (Result.Success results)
-        (Result.Error acc))))
-
   (doc pipeline-exec
     "sends all commands in the pipeline and reads all responses.
 
@@ -748,7 +780,7 @@ in the order they were added.")
         (Result.Success (the (Array RESP) []))
         (match (TcpStream.send (sock r) &(StringBuf.str (RedisPipeline.buf p)))
           (Result.Error e) (Result.Error e)
-          (Result.Success _) (pipeline-read r n))))))
+          (Result.Success _) (read-n r n))))))
 
 (defndynamic pipeline-cmd- [cmd]
   (let [name (car cmd)
