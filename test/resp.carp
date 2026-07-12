@@ -373,6 +373,10 @@
 
   (assert-true test (decode-err? ":notanumber\r\n") "reject non-numeric integer")
 
+  ; ":\r\n" is an empty integer field; it must be rejected, not decoded as 0
+  ; (Int.from-string "" is (Just 0)), which would silently accept corrupt input
+  (assert-true test (decode-err? ":\r\n") "reject empty integer")
+
   (assert-true test
     (decode-err? "$abc\r\ndata\r\n")
     "reject bulk string with non-numeric length")

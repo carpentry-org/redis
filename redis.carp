@@ -51,8 +51,11 @@
                     (Err (String.byte-slice s rest-start idx))
                     (+ idx 2)))))
             \:
+            ; search from rest-start, not pos: unlike +/-, an empty integer
+            ; (":\r\n") has no round-trip to preserve and must stay malformed —
+            ; Int.from-string "" is (Just 0), which would silently decode as 0
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return pos)]
+                  idx (String.index-of-from s \return rest-start)]
               (if (= idx -1)
                 (Error @"Malformed integer")
                 (match (Int.from-string &(String.byte-slice s rest-start idx))
