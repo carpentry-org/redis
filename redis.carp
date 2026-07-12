@@ -31,8 +31,10 @@
       (Error @"Unexpected end of RESP input")
       (case (String.char-at s pos)
             \+
+            ; search from pos (exclusive), not rest-start, so the CRLF of an
+            ; empty value ("+\r\n") is found instead of skipped
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return rest-start)]
+                  idx (String.index-of-from s \return pos)]
               (if (= idx -1)
                 (Error @"Malformed simple string")
                 (Success
@@ -41,7 +43,7 @@
                     (+ idx 2)))))
             \-
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return rest-start)]
+                  idx (String.index-of-from s \return pos)]
               (if (= idx -1)
                 (Error @"Malformed error string")
                 (Success
@@ -50,7 +52,7 @@
                     (+ idx 2)))))
             \:
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return rest-start)]
+                  idx (String.index-of-from s \return pos)]
               (if (= idx -1)
                 (Error @"Malformed integer")
                 (match (Int.from-string &(String.byte-slice s rest-start idx))
