@@ -116,11 +116,11 @@
       _ false)
     "decode simple string +OK")
 
-  ; empty simple string "+\r\n" hits a String.index-of-from edge case
-  ; (exclusive start position), so the decoder returns an error here.
   (assert-true test
-    (match (RESP.from-string "+\r\n") (Result.Error _) true _ false)
-    "decode empty simple string — known limitation")
+    (match (RESP.from-string "+\r\n")
+      (Result.Success r) (match r (RESP.Str s) (String.empty? &s) _ false)
+      _ false)
+    "decode empty simple string")
 
   (assert-true test
     (match (RESP.from-string "+hello world\r\n")
@@ -141,6 +141,19 @@
         (match r (RESP.Err s) (= &s "WRONGTYPE Operation against a key") _ false)
       _ false)
     "decode long error message")
+
+  (assert-true test
+    (match (RESP.from-string "-\r\n")
+      (Result.Success r) (match r (RESP.Err s) (String.empty? &s) _ false)
+      _ false)
+    "decode empty error string")
+
+  ; the encoder emits "-\r\n" for an empty error, so decode must accept it back
+  (assert-true test
+    (match (RESP.from-string &(str &(RESP.Err @"")))
+      (Result.Success r) (match r (RESP.Err s) (String.empty? &s) _ false)
+      _ false)
+    "empty error round-trips through encode/decode")
 
   (assert-true test
     (match (RESP.from-string ":42\r\n")
@@ -359,6 +372,10 @@
   (assert-true test (decode-err? ":no crlf") "reject integer without CRLF")
 
   (assert-true test (decode-err? ":notanumber\r\n") "reject non-numeric integer")
+
+  ; ":\r\n" is an empty integer field; it must be rejected, not decoded as 0
+  ; (Int.from-string "" is (Just 0)), which would silently accept corrupt input
+  (assert-true test (decode-err? ":\r\n") "reject empty integer")
 
   (assert-true test
     (decode-err? "$abc\r\ndata\r\n")
