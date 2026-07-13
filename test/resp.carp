@@ -36,6 +36,28 @@
         (Result.Error _) (set! going false)))
     msgs))
 
+; run the exact accumulate loop Redis.read-n uses — decode-available from the
+; buffer, drop the consumed prefix, append the next socket read — but over a
+; fixed list of chunks instead of a live socket, so the buffered read logic is
+; testable without a server. Returns the decoded values paired with the leftover.
+(defn feed-n [chunks n]
+  (let-do [acc @""
+           results (the (Array RESP) [])
+           ci 0
+           reading true]
+    (while-do (and reading (< (Array.length &results) n))
+      (let-do [p (RESP.decode-available &acc 0 (- n (Array.length &results)))]
+        (for [i 0 (Array.length (Pair.a &p))]
+          (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
+        (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
+      (when (< (Array.length &results) n)
+        (if (>= ci (Array.length chunks))
+          (set! reading false)
+          (do
+            (set! acc (String.concat &[acc @(Array.unsafe-nth chunks ci)]))
+            (set! ci (Int.inc ci))))))
+    (Pair.init results acc)))
+
 (deftest test
   (assert-equal test "$-1\r\n" &(str &(RESP.Null)) "encode Null")
 
@@ -559,6 +581,79 @@
   (assert-true test
     (decode-err? "$-2\r\nxx\r\n")
     "reject bulk string with negative length")
+
+  ; --- decode-available: the offset-aware primitive behind buffered reads ---
+  (assert-true test
+    (let-do [p (RESP.decode-available "+OK\r\n:42\r\n" 0 2)]
+      (and (= (Array.length (Pair.a &p)) 2) (= @(Pair.b &p) 10)))
+    "decode-available: two values, offset points just past both")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available "+OK\r\n:42\r\n" 5 1)]
+      (and (= (Array.length (Pair.a &p)) 1)
+           (match @(Array.unsafe-nth (Pair.a &p) 0)
+             (RESP.Integer i) (= i 42)
+             _ false)
+           (= @(Pair.b &p) 10)))
+    "decode-available: decodes starting from a byte offset")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available "+OK\r\n:42\r\n" 0 5)]
+      (and (= (Array.length (Pair.a &p)) 2) (= @(Pair.b &p) 10)))
+    "decode-available: stops at end when fewer than n values are present")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available "+OK\r\n:4" 0 5)]
+      (and (= (Array.length (Pair.a &p)) 1) (= @(Pair.b &p) 5)))
+    "decode-available: offset stays at the start of an incomplete trailing value")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available "" 0 3)]
+      (and (= (Array.length (Pair.a &p)) 0) (= @(Pair.b &p) 0)))
+    "decode-available: empty buffer decodes nothing")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available "+OK\r\n" 0 0)]
+      (and (= (Array.length (Pair.a &p)) 0) (= @(Pair.b &p) 0)))
+    "decode-available: requesting zero values consumes nothing")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available "+OK\r\n$-2\r\nxx\r\n" 0 5)]
+      (= (Array.length (Pair.a &p)) 1))
+    "decode-available: stops at a malformed value, keeping the earlier ones")
+
+  ; --- buffered read loop (Redis.read-n's decode + compact + append), driven
+  ;     over scripted socket chunks so it is verifiable without a server ---
+  (assert-true test
+    (let-do [p (feed-n &[@"+A\r\n+B\r\n+C\r\n"] 3)]
+      (and (= (Array.length (Pair.a &p)) 3) (String.empty? (Pair.b &p))))
+    "buffered read: three coalesced values decode with an empty leftover")
+
+  (assert-true test
+    (let-do [p (feed-n &[@"$3\r\nfo" @"o\r\n"] 1)]
+      (and (= (Array.length (Pair.a &p)) 1)
+           (match @(Array.unsafe-nth (Pair.a &p) 0)
+             (RESP.Str s) (= &s "foo")
+             _ false)))
+    "buffered read: a bulk string split across two chunks reassembles")
+
+  (assert-true test
+    (let-do [p (feed-n &[@"$5\r\nhe" @"ll" @"o\r\n"] 1)]
+      (and (= (Array.length (Pair.a &p)) 1)
+           (match @(Array.unsafe-nth (Pair.a &p) 0)
+             (RESP.Str s) (= &s "hello")
+             _ false)))
+    "buffered read: a value spanning three chunks reassembles")
+
+  (assert-true test
+    (let-do [p (feed-n &[@"+A\r\n+B\r\n"] 1)]
+      (and (= (Array.length (Pair.a &p)) 1) (= (Pair.b &p) "+B\r\n")))
+    "buffered read: bytes past the nth value are kept as leftover")
+
+  (assert-true test
+    (let-do [p (feed-n &[@"+A\r\n:1" @"0\r\n$2\r\nhi\r\n"] 3)]
+      (= (Array.length (Pair.a &p)) 3))
+    "buffered read: mixed coalesced and split values across chunks all decode")
 
   (assert-equal test
     0

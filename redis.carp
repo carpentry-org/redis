@@ -23,18 +23,34 @@
             (Array.push-back! &parts (str (Box.peek (Array.unsafe-nth &a i)))))
           (String.concat &parts))))
 
-  (hidden decode-one)
-  (private decode-one)
-  (defn decode-one [s pos]
+  (hidden find-cr-after)
+  (private find-cr-after)
+  ; index of the first \r strictly after `x`, within `slen` bytes, or -1. Mirrors
+  ; String.index-of-from but takes the length as an argument instead of calling
+  ; strlen: decoding a whole buffer runs this once per value, and index-of-from's
+  ; per-call O(n) strlen is what made a buffered multi-value read quadratic.
+  (defn find-cr-after [s x slen]
+    (let-do [i (Int.inc x)
+             found -1]
+      (while-do (and (= found -1) (< i slen))
+        (when (= (String.char-at s i) \return) (set! found i))
+        (set! i (Int.inc i)))
+      found))
+
+  (hidden decode-one-at)
+  (private decode-one-at)
+  ; decode the value at `pos` in a buffer of length `slen`. `slen` is threaded in
+  ; rather than recomputed so a caller decoding many values stays linear.
+  (defn decode-one-at [s pos slen]
     ; out of input mid-value: error rather than pad the array with a phantom Null
-    (if (>= pos (String.length s))
+    (if (>= pos slen)
       (Error @"Unexpected end of RESP input")
       (case (String.char-at s pos)
             \+
             ; search from pos (exclusive), not rest-start, so the CRLF of an
             ; empty value ("+\r\n") is found instead of skipped
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return pos)]
+                  idx (find-cr-after s pos slen)]
               (if (= idx -1)
                 (Error @"Malformed simple string")
                 (Success
@@ -43,7 +59,7 @@
                     (+ idx 2)))))
             \-
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return pos)]
+                  idx (find-cr-after s pos slen)]
               (if (= idx -1)
                 (Error @"Malformed error string")
                 (Success
@@ -55,7 +71,7 @@
             ; (":\r\n") has no round-trip to preserve and must stay malformed —
             ; Int.from-string "" is (Just 0), which would silently decode as 0
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return rest-start)]
+                  idx (find-cr-after s rest-start slen)]
               (if (= idx -1)
                 (Error @"Malformed integer")
                 (match (Int.from-string &(String.byte-slice s rest-start idx))
@@ -63,7 +79,7 @@
                   (Maybe.Just n) (Success (Pair.init (Integer n) (+ idx 2))))))
             \$
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return rest-start)]
+                  idx (find-cr-after s rest-start slen)]
               (if (= idx -1)
                 (Error @"Malformed bulk string")
                 (match (Int.from-string &(String.byte-slice s rest-start idx))
@@ -72,7 +88,7 @@
                       @"Error decoding bulk string: does not start with length!")
                   (Maybe.Just len)
                     (let [data-start (+ idx 2)
-                          available (- (String.length s) data-start)]
+                          available (- slen data-start)]
                       (cond
                         (= len -1)
                         (Success (Pair.init (Null) data-start))
@@ -89,7 +105,7 @@
                             (+ data-start (+ len 2)))))))))
             \*
             (let [rest-start (+ pos 1)
-                  idx (String.index-of-from s \return rest-start)]
+                  idx (find-cr-after s rest-start slen)]
               (if (= idx -1)
                 (Error @"Malformed array")
                 (match (Int.from-string &(String.byte-slice s rest-start idx))
@@ -107,7 +123,7 @@
                                a []
                                err @""]
                         (for [i 0 len]
-                          (match (decode-one s cur)
+                          (match (decode-one-at s cur slen)
                             (Result.Error e) (do (set! err e) (break))
                             (Result.Success p)
                               (do
@@ -119,6 +135,10 @@
             (Error
               (fmt "Malformed RESP data: got %s"
                    &(String.byte-slice s pos (+ pos 1)))))))
+
+  (hidden decode-one)
+  (private decode-one)
+  (defn decode-one [s pos] (decode-one-at s pos (String.length s)))
 
   (doc from-string "converts a RESP string into a `RESP` data structure.")
   (defn from-string [s]
@@ -165,6 +185,36 @@ input is malformed or because a value is truncated mid-way.")
           (Pair.init @(Pair.a &p)
                      (String.byte-slice s @(Pair.b &p) (String.length s))))))
 
+  (doc decode-available "decodes up to `n` complete `RESP` values from `s`,
+starting at byte offset `start`.
+
+Returns a `Pair` of the decoded values and the byte offset just past the last
+one — where a streaming caller should resume once more bytes arrive. Decoding
+stops at the first incomplete or malformed value, so the array may hold fewer
+than `n` values and the offset then marks the start of the still-unconsumed
+tail. Unlike [`decode-first`](#decode-first) it consumes many values in a single
+left-to-right pass without re-slicing between them, which is what lets a
+buffered reader stay linear instead of quadratic.")
+  (defn decode-available [s start n]
+    (let-do [results []
+             cur start
+             len (String.length s)
+             reading true]
+      (while (and reading (< (Array.length &results) n))
+        (if (>= cur len)
+          (set! reading false)
+          (match (decode-one-at s cur len)
+            (Result.Error _)
+            (set! reading false)
+            (Result.Success p)
+            ; a zero-width decode would spin without consuming input; stop
+            (if (<= @(Pair.b &p) cur)
+              (set! reading false)
+              (do
+                (Array.push-back! &results @(Pair.a &p))
+                (set! cur @(Pair.b &p)))))))
+      (Pair.init results cur)))
+
   (definterface to-redis (Fn [a] RESP)))
 
 (defmodule String
@@ -206,17 +256,23 @@ on the connection so a later read can consume them instead of losing them.")
              results (the (Array RESP) [])
              err @""
              reading true]
-      (while (and reading (< (Array.length &results) (the Int n)))
-        (match (RESP.decode-first &acc)
-          (Result.Success p)
-            (do (Array.push-back! &results @(Pair.a &p)) (set! acc @(Pair.b &p)))
-          (Result.Error _)
-            (match (the (Result String String) (TcpStream.read (sock r)))
-              (Result.Error e) (do (set! err e) (set! reading false))
-              (Result.Success s)
-                (if (String.empty? &s)
-                  (do (set! err @"connection closed") (set! reading false))
-                  (set! acc (String.concat &[acc s]))))))
+      (while-do (and reading (< (Array.length &results) (the Int n)))
+        (let-do [p (RESP.decode-available &acc
+                                          0
+                                          (- (the Int n) (Array.length &results)))]
+          (for [i 0 (Array.length (Pair.a &p))]
+            (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
+          ; drop the consumed prefix so the next decode pass and any socket
+          ; append work on the unconsumed tail only — this is what keeps a
+          ; multi-value or pipelined read linear instead of quadratic
+          (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
+        (when (< (Array.length &results) (the Int n))
+          (match (the (Result String String) (TcpStream.read (sock r)))
+            (Result.Error e) (do (set! err e) (set! reading false))
+            (Result.Success s)
+              (if (String.empty? &s)
+                (do (set! err @"connection closed") (set! reading false))
+                (set! acc (String.concat &[acc s]))))))
       (set-buf! r acc)
       (if (= (Array.length &results) (the Int n))
         (Result.Success results)
