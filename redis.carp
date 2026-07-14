@@ -39,8 +39,6 @@
 
   (hidden parse-bulk-header)
   (private parse-bulk-header)
-  ; parse a `$<len>\r\n` header at `pos`; (Just (Pair data-start len)) or Nothing
-  ; if the line is incomplete or the length malformed
   (defn parse-bulk-header [s pos slen]
     (let [idx (find-cr-after s (+ pos 1) slen)]
       (if (= idx -1)
@@ -222,10 +220,7 @@ buffered reader stay linear instead of quadratic.")
       (Pair.init results cur)))
 
   (doc bulk-fill-target
-    "returns `(Just target)` when the value at `start` in `s`
-(length `slen`) is a bulk string whose `$<len>` header arrived but whose payload
-has not — `target` is the buffer length needed before it decodes — else
-`Nothing`.")
+    "the buffer length the partial bulk string at `start` needs before it decodes, when its header has arrived but its payload has not; else `Nothing`.")
   (defn bulk-fill-target [s start slen]
     (if (or (>= start slen) (/= (String.char-at s start) \$))
       (Maybe.Nothing)
@@ -234,14 +229,11 @@ has not — `target` is the buffer length needed before it decodes — else
         (Maybe.Just header)
           (let [data-start @(Pair.a &header)
                 len @(Pair.b &header)]
-            (if (< len 0)
-              (Maybe.Nothing)
-              ; not-fillable if data-start+len+2 would overflow Int; the decode
-              ; path reports it instead
-              (if (> len (- Int.MAX (+ data-start 2)))
-                (Maybe.Nothing)
-                (let [target (+ data-start (+ len 2))]
-                  (if (> target slen) (Maybe.Just target) (Maybe.Nothing)))))))))
+            (cond
+              (< len 0) (Maybe.Nothing)
+              (> len (- Int.MAX (+ data-start 2))) (Maybe.Nothing)
+              (let [target (+ data-start (+ len 2))]
+                (if (> target slen) (Maybe.Just target) (Maybe.Nothing))))))))
 
   (definterface to-redis (Fn [a] RESP)))
 
@@ -297,29 +289,26 @@ on the connection so a later read can consume them instead of losing them.")
         (when (< (Array.length &results) (the Int n))
           (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
             (Maybe.Just target)
-            ; head is a bulk whose header arrived but whose payload has not: fill a
-            ; byte buffer to its declared length (O(N) total) instead of re-copying
-            ; acc per read
-            (let-do [bytes (String.to-bytes &acc)
-                     filling true]
-              (while-do (and filling (< (Array.length &bytes) target))
-                (match (the (Result Int String)
-                            (TcpStream.read-append (sock r) &bytes))
-                  (Result.Error e)
-                    (do (set! err e) (set! reading false) (set! filling false))
-                  (Result.Success k)
-                    (when-do (= k 0)
-                      (set! err @"connection closed")
-                      (set! reading false)
-                      (set! filling false))))
-              (set! acc (String.from-bytes &bytes)))
+              (let-do [bytes (String.to-bytes &acc)
+                       filling true]
+                (while-do (and filling (< (Array.length &bytes) target))
+                  (match (the (Result Int String)
+                              (TcpStream.read-append (sock r) &bytes))
+                    (Result.Error e)
+                      (do (set! err e) (set! reading false) (set! filling false))
+                    (Result.Success k)
+                      (when-do (= k 0)
+                        (set! err @"connection closed")
+                        (set! reading false)
+                        (set! filling false))))
+                (set! acc (String.from-bytes &bytes)))
             (Maybe.Nothing)
-            (match (the (Result String String) (TcpStream.read (sock r)))
-              (Result.Error e) (do (set! err e) (set! reading false))
-              (Result.Success s)
-                (if (String.empty? &s)
-                  (do (set! err @"connection closed") (set! reading false))
-                  (set! acc (String.concat &[acc s])))))))
+              (match (the (Result String String) (TcpStream.read (sock r)))
+                (Result.Error e) (do (set! err e) (set! reading false))
+                (Result.Success s)
+                  (if (String.empty? &s)
+                    (do (set! err @"connection closed") (set! reading false))
+                    (set! acc (String.concat &[acc s])))))))
       (set-buf! r acc)
       (if (= (Array.length &results) (the Int n))
         (Result.Success results)
