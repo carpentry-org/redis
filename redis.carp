@@ -39,13 +39,8 @@
 
   (hidden parse-bulk-header)
   (private parse-bulk-header)
-  ; parse the `$<len>\r\n` header of the value at `pos` in a buffer of length
-  ; `slen`. Returns (Just (Pair data-start len)) once the header line has fully
-  ; arrived and its length parses — `data-start` is the payload offset, `len` the
-  ; declared byte count — or Nothing while the header is incomplete or malformed.
-  ; Shared by decode-one-at's $ branch and bulk-fill-target so both read the
-  ; header identically. Searches from pos+1 exclusive like the original $ branch,
-  ; so an empty length ("$\r\n") yields no digit run and fails to parse.
+  ; parse a `$<len>\r\n` header at `pos`; (Just (Pair data-start len)) or Nothing
+  ; if the line is incomplete or the length malformed
   (defn parse-bulk-header [s pos slen]
     (let [idx (find-cr-after s (+ pos 1) slen)]
       (if (= idx -1)
@@ -226,17 +221,11 @@ buffered reader stay linear instead of quadratic.")
                 (set! cur @(Pair.b &p)))))))
       (Pair.init results cur)))
 
-  (doc bulk-fill-target "reports the buffer length at which the bulk string at
-byte offset `start` becomes decodable.
-
-Given a buffer `s` of length `slen`, returns `(Just target)` when the value at
-`start` is a bulk string whose `$<len>` header has fully arrived but whose
-payload has not — `target` is the exact number of bytes the buffer must hold
-before the value can be decoded. Returns `Nothing` for every other case: a
-non-bulk value, a header that has not fully arrived, a null or malformed length,
-or a bulk that is already complete. A streaming reader can use this to fill a
-large split value straight to its known length with amortized-O(1) appends
-instead of re-decoding the whole accumulator on every socket read.")
+  (doc bulk-fill-target
+    "returns `(Just target)` when the value at `start` in `s`
+(length `slen`) is a bulk string whose `$<len>` header arrived but whose payload
+has not — `target` is the buffer length needed before it decodes — else
+`Nothing`.")
   (defn bulk-fill-target [s start slen]
     (if (or (>= start slen) (/= (String.char-at s start) \$))
       (Maybe.Nothing)
@@ -247,10 +236,8 @@ instead of re-decoding the whole accumulator on every socket read.")
                 len @(Pair.b &header)]
             (if (< len 0)
               (Maybe.Nothing)
-              ; guard the offset arithmetic against a bogus huge declared length:
-              ; if data-start+len+2 would overflow Int, treat it as not-fillable
-              ; so the normal decode path reports it rather than us spinning on an
-              ; unreachable target
+              ; not-fillable if data-start+len+2 would overflow Int; the decode
+              ; path reports it instead
               (if (> len (- Int.MAX (+ data-start 2)))
                 (Maybe.Nothing)
                 (let [target (+ data-start (+ len 2))]
@@ -310,12 +297,9 @@ on the connection so a later read can consume them instead of losing them.")
         (when (< (Array.length &results) (the Int n))
           (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
             (Maybe.Just target)
-            ; the head is a bulk string whose length header arrived but whose
-            ; payload has not. Read straight into a byte buffer until exactly
-            ; its declared length is present: byte appends grow geometrically
-            ; and the length check is O(1), so a large value split across many
-            ; small reads costs O(N) instead of re-copying the whole
-            ; accumulator on every read
+            ; head is a bulk whose header arrived but whose payload has not: fill a
+            ; byte buffer to its declared length (O(N) total) instead of re-copying
+            ; acc per read
             (let-do [bytes (String.to-bytes &acc)
                      filling true]
               (while-do (and filling (< (Array.length &bytes) target))

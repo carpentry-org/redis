@@ -36,14 +36,9 @@
         (Result.Error _) (set! going false)))
     msgs))
 
-; run the exact accumulate loop Redis.read-n uses — decode-available from the
-; buffer, drop the consumed prefix, then pull more input — but over a fixed list
-; of chunks instead of a live socket, so the buffered read logic is testable
-; without a server. Mirrors read-n's length-aware fill: when the head is a bulk
-; whose header arrived but whose payload has not, pull chunks straight to its
-; declared length before decoding again (read-n reads into a byte buffer there);
-; otherwise pull a single chunk like read-n's single socket read. Returns the
-; decoded values paired with the leftover.
+; run read-n's accumulate loop over a fixed chunk list instead of a live socket,
+; so the buffered read logic is testable without a server. Mirrors read-n's
+; length-aware fill for a split bulk. Returns the decoded values and the leftover.
 (defn feed-n [chunks n]
   (let-do [acc @""
            results (the (Array RESP) [])
@@ -675,10 +670,8 @@
       (= (Array.length (Pair.a &p)) 3))
     "buffered read: mixed coalesced and split values across chunks all decode")
 
-  ; a single large bulk split across hundreds of tiny reads must reassemble.
-  ; feed-n mirrors read-n's length-aware fill, so this exercises the path that
-  ; was quadratic before: bulk-fill-target drives the buffer straight to the
-  ; declared length instead of re-decoding and re-copying on every chunk.
+  ; a large bulk split across many tiny reads must reassemble (the old quadratic
+  ; path)
   (assert-true test
     (let [payload (String.repeat 20000 "abcde")
           frame (str &(RESP.Str @&payload))
@@ -691,9 +684,8 @@
              (String.empty? (Pair.b &p)))))
     "buffered read: a 100000-byte bulk split into tiny chunks reassembles")
 
-  ; a reply that coalesced right after the large bulk must survive: the first
-  ; value decodes and the trailing reply is kept as leftover, not over-consumed
-  ; by the fill nor dropped
+  ; a reply coalesced right after the large bulk is kept as leftover, not
+  ; over-consumed by the fill
   (assert-true test
     (let [payload (String.repeat 20000 "abcde")
           frame (String.concat &[(str &(RESP.Str @&payload)) @"+OK\r\n"])
