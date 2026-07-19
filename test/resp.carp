@@ -36,10 +36,10 @@
         (Result.Error _) (set! going false)))
     msgs))
 
-; run the exact accumulate loop Redis.read-n uses — decode-available from the
-; buffer, drop the consumed prefix, append the next socket read — but over a
-; fixed list of chunks instead of a live socket, so the buffered read logic is
-; testable without a server. Returns the decoded values paired with the leftover.
+(doc feed-n
+  "runs `read-n`'s accumulate loop over a fixed chunk list instead of a live socket,
+so the buffered read logic is testable without a server. Mirrors `read-n`'s
+length-aware fill for a split bulk. Returns the decoded values and the leftover.")
 (defn feed-n [chunks n]
   (let-do [acc @""
            results (the (Array RESP) [])
@@ -53,10 +53,27 @@
       (when (< (Array.length &results) n)
         (if (>= ci (Array.length chunks))
           (set! reading false)
-          (do
-            (set! acc (String.concat &[acc @(Array.unsafe-nth chunks ci)]))
-            (set! ci (Int.inc ci))))))
+          (let [target (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
+                  (Maybe.Just t) t
+                  (Maybe.Nothing) (Int.inc (String.length &acc)))]
+            (while-do (and (< ci (Array.length chunks))
+                           (< (String.length &acc) target))
+              (set! acc (String.concat &[acc @(Array.unsafe-nth chunks ci)]))
+              (set! ci (Int.inc ci)))))))
     (Pair.init results acc)))
+
+(doc chunk-by
+  "splits `s` into consecutive byte-slices of at most `size` bytes, so a large
+frame can be fed to `feed-n` the way many small socket reads deliver it.")
+(defn chunk-by [s size]
+  (let-do [chunks (the (Array String) [])
+           i 0
+           total (String.length s)]
+    (while-do (< i total)
+      (let-do [end (if (< (+ i size) total) (+ i size) total)]
+        (Array.push-back! &chunks (String.byte-slice s i end))
+        (set! i end)))
+    chunks))
 
 (deftest test
   (assert-equal test "$-1\r\n" &(str &(RESP.Null)) "encode Null")
@@ -654,6 +671,34 @@
     (let-do [p (feed-n &[@"+A\r\n:1" @"0\r\n$2\r\nhi\r\n"] 3)]
       (= (Array.length (Pair.a &p)) 3))
     "buffered read: mixed coalesced and split values across chunks all decode")
+
+  ; a large bulk split across many tiny reads must reassemble (the old quadratic
+  ; path)
+  (assert-true test
+    (let [payload (String.repeat 20000 "abcde")
+          frame (str &(RESP.Str @&payload))
+          p (feed-n &(chunk-by &frame 250) 1)]
+      (and (= (Array.length (Pair.a &p)) 1)
+           (and
+             (match @(Array.unsafe-nth (Pair.a &p) 0)
+               (RESP.Str s) (= &s &payload)
+               _ false)
+             (String.empty? (Pair.b &p)))))
+    "buffered read: a 100000-byte bulk split into tiny chunks reassembles")
+
+  ; a reply coalesced right after the large bulk is kept as leftover, not
+  ; over-consumed by the fill
+  (assert-true test
+    (let [payload (String.repeat 20000 "abcde")
+          frame (String.concat &[(str &(RESP.Str @&payload)) @"+OK\r\n"])
+          p (feed-n &(chunk-by &frame 250) 1)]
+      (and (= (Array.length (Pair.a &p)) 1)
+           (and
+             (match @(Array.unsafe-nth (Pair.a &p) 0)
+               (RESP.Str s) (= &s &payload)
+               _ false)
+             (= (Pair.b &p) "+OK\r\n"))))
+    "buffered read: a reply coalesced after a large bulk decodes and is retained")
 
   (assert-equal test
     0

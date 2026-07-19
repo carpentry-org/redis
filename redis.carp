@@ -37,6 +37,16 @@
         (set! i (Int.inc i)))
       found))
 
+  (hidden parse-bulk-header)
+  (private parse-bulk-header)
+  (defn parse-bulk-header [s pos slen]
+    (let [idx (find-cr-after s (+ pos 1) slen)]
+      (if (= idx -1)
+        (Maybe.Nothing)
+        (match (Int.from-string &(String.byte-slice s (+ pos 1) idx))
+          (Maybe.Nothing) (Maybe.Nothing)
+          (Maybe.Just len) (Maybe.Just (Pair.init (+ idx 2) len))))))
+
   (hidden decode-one-at)
   (private decode-one-at)
   ; decode the value at `pos` in a buffer of length `slen`. `slen` is threaded in
@@ -78,31 +88,25 @@
                   (Maybe.Nothing) (Error @"Could not parse integer in result.")
                   (Maybe.Just n) (Success (Pair.init (Integer n) (+ idx 2))))))
             \$
-            (let [rest-start (+ pos 1)
-                  idx (find-cr-after s rest-start slen)]
-              (if (= idx -1)
-                (Error @"Malformed bulk string")
-                (match (Int.from-string &(String.byte-slice s rest-start idx))
-                  (Maybe.Nothing)
-                    (Error
-                      @"Error decoding bulk string: does not start with length!")
-                  (Maybe.Just len)
-                    (let [data-start (+ idx 2)
-                          available (- slen data-start)]
-                      (cond
-                        (= len -1)
-                        (Success (Pair.init (Null) data-start))
-                        (< len 0)
-                        (Error @"Malformed bulk string: negative length")
-                        ; payload + trailing CRLF must be present; comparing len
-                        ; alone avoids overflow on a huge declared length
-                        (> len (- available 2))
-                        (Error @"Incomplete bulk string")
-                        (Success
-                          (Pair.init
-                            (Str
-                              (String.byte-slice s data-start (+ data-start len)))
-                            (+ data-start (+ len 2)))))))))
+            (match (parse-bulk-header s pos slen)
+              (Maybe.Nothing) (Error @"Malformed bulk string")
+              (Maybe.Just header)
+                (let [data-start @(Pair.a &header)
+                      len @(Pair.b &header)
+                      available (- slen data-start)]
+                  (cond
+                    (= len -1)
+                    (Success (Pair.init (Null) data-start))
+                    (< len 0)
+                    (Error @"Malformed bulk string: negative length")
+                    ; payload + trailing CRLF must be present; comparing len
+                    ; alone avoids overflow on a huge declared length
+                    (> len (- available 2))
+                    (Error @"Incomplete bulk string")
+                    (Success
+                      (Pair.init
+                        (Str (String.byte-slice s data-start (+ data-start len)))
+                        (+ data-start (+ len 2)))))))
             \*
             (let [rest-start (+ pos 1)
                   idx (find-cr-after s rest-start slen)]
@@ -215,6 +219,22 @@ buffered reader stay linear instead of quadratic.")
                 (set! cur @(Pair.b &p)))))))
       (Pair.init results cur)))
 
+  (doc bulk-fill-target
+    "the buffer length the partial bulk string at `start` needs before it decodes, when its header has arrived but its payload has not; else `Nothing`.")
+  (defn bulk-fill-target [s start slen]
+    (if (or (>= start slen) (/= (String.char-at s start) \$))
+      (Maybe.Nothing)
+      (match (parse-bulk-header s start slen)
+        (Maybe.Nothing) (Maybe.Nothing)
+        (Maybe.Just header)
+          (let [data-start @(Pair.a &header)
+                len @(Pair.b &header)]
+            (cond
+              (< len 0) (Maybe.Nothing)
+              (> len (- Int.MAX (+ data-start 2))) (Maybe.Nothing)
+              (let [target (+ data-start (+ len 2))]
+                (if (> target slen) (Maybe.Just target) (Maybe.Nothing))))))))
+
   (definterface to-redis (Fn [a] RESP)))
 
 (defmodule String
@@ -267,12 +287,28 @@ on the connection so a later read can consume them instead of losing them.")
           ; multi-value or pipelined read linear instead of quadratic
           (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
         (when (< (Array.length &results) (the Int n))
-          (match (the (Result String String) (TcpStream.read (sock r)))
-            (Result.Error e) (do (set! err e) (set! reading false))
-            (Result.Success s)
-              (if (String.empty? &s)
-                (do (set! err @"connection closed") (set! reading false))
-                (set! acc (String.concat &[acc s]))))))
+          (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
+            (Maybe.Just target)
+              (let-do [bytes (String.to-bytes &acc)
+                       filling true]
+                (while-do (and filling (< (Array.length &bytes) target))
+                  (match (the (Result Int String)
+                              (TcpStream.read-append (sock r) &bytes))
+                    (Result.Error e)
+                      (do (set! err e) (set! reading false) (set! filling false))
+                    (Result.Success k)
+                      (when-do (= k 0)
+                        (set! err @"connection closed")
+                        (set! reading false)
+                        (set! filling false))))
+                (set! acc (String.from-bytes &bytes)))
+            (Maybe.Nothing)
+              (match (the (Result String String) (TcpStream.read (sock r)))
+                (Result.Error e) (do (set! err e) (set! reading false))
+                (Result.Success s)
+                  (if (String.empty? &s)
+                    (do (set! err @"connection closed") (set! reading false))
+                    (set! acc (String.concat &[acc s])))))))
       (set-buf! r acc)
       (if (= (Array.length &results) (the Int n))
         (Result.Success results)
