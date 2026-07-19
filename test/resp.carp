@@ -36,9 +36,10 @@
         (Result.Error _) (set! going false)))
     msgs))
 
-; run read-n's accumulate loop over a fixed chunk list instead of a live socket,
-; so the buffered read logic is testable without a server. Mirrors read-n's
-; length-aware fill for a split bulk. Returns the decoded values and the leftover.
+(doc feed-n
+  "runs `read-n`'s accumulate loop over a fixed chunk list instead of a live socket,
+so the buffered read logic is testable without a server. Mirrors `read-n`'s
+length-aware fill for a split bulk. Returns the decoded values and the leftover.")
 (defn feed-n [chunks n]
   (let-do [acc @""
            results (the (Array RESP) [])
@@ -61,8 +62,9 @@
               (set! ci (Int.inc ci)))))))
     (Pair.init results acc)))
 
-; split `s` into consecutive byte-slices of at most `size` bytes, so a large
-; frame can be fed to feed-n the way many small socket reads deliver it
+(doc chunk-by
+  "splits `s` into consecutive byte-slices of at most `size` bytes, so a large
+frame can be fed to `feed-n` the way many small socket reads deliver it.")
 (defn chunk-by [s size]
   (let-do [chunks (the (Array String) [])
            i 0
