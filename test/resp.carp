@@ -755,6 +755,22 @@ frame can be fed to `feed-n` the way many small socket reads deliver it.")
     (StringBuf.length (RedisPipeline.buf &(RedisPipeline.begin)))
     "pipeline begin has empty buffer")
 
+  ; --- command encoding ---
+  (assert-equal test
+    "*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"
+    &(RESP.encode-command "SET" &[(to-redis @"foo") (to-redis @"bar")])
+    "encode-command encodes a command with arguments")
+
+  (assert-equal test
+    "*2\r\n$6\r\nCLIENT\r\n$2\r\nID\r\n"
+    &(RESP.encode-command "CLIENT ID" &(the (Array RESP) []))
+    "encode-command splits a space-separated command name")
+
+  (assert-equal test
+    "*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$9\r\nmaxmemory\r\n"
+    &(RESP.encode-command "CONFIG GET" &[(to-redis @"maxmemory")])
+    "encode-command splits a multi-word command name with arguments")
+
   ; --- pub/sub message decoding ---
   (assert-true test
     (match (PubSubMessage.decode-message
