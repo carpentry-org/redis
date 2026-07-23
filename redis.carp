@@ -245,6 +245,19 @@ buffered reader stay linear instead of quadratic.")
   (defn to-redis [s] (RESP.Integer s))
   (implements to-redis Int.to-redis))
 
+(defmodule RESP
+  (doc encode-command
+    "encodes command name `cmd` and its already-encoded `args` into a RESP
+multi-bulk wire string. Sub-commands in `cmd` are separated by spaces (e.g.
+`@\"CLIENT ID\"`).")
+  (defn encode-command [cmd args]
+    (str
+      &(Arr
+        (Array.concat
+          &[(Array.copy-map &(fn [x] (Box.init (to-redis @x)))
+                            &(Pattern.split #" " cmd))
+            (Array.copy-map &(fn [x] (Box.init @x)) args)])))))
+
 (deftype Redis [sock TcpStream
                 buf String])
 
@@ -329,11 +342,7 @@ connection for the next [`read`](#read), so no reply is ever dropped.")
 
 Returns `(Result () String)`, propagating any socket errors.")
   (defn send [r cmd args]
-    (let [cmd-parts (copy-map &(fn [x] (Box.init (to-redis @x)))
-                              &(Pattern.split #" " &cmd))
-          msg (str
-            &(RESP.Arr
-              (concat &[cmd-parts (copy-map &(fn [x] (Box.init @x)) args)])))]
+    (let [msg (RESP.encode-command &cmd args)]
       (match (TcpStream.send (sock r) &msg)
         (Result.Success _n) (Result.Success ())
         (Result.Error e) (Result.Error e))))
@@ -856,12 +865,7 @@ The command name must use spaces to separate sub-commands (e.g.
 `@\"CLIENT ID\"`, not `@\"client-id\"`). The [`with-pipeline`](#with-pipeline)
 macro converts hyphens to spaces automatically, but `add` does not.")
   (defn add [p cmd args]
-    (let-do [cmd-parts (Array.copy-map &(fn [x] (Box.init (to-redis @x)))
-                                       &(Pattern.split #" " &cmd))
-             msg (str
-               &(RESP.Arr
-                 (Array.concat
-                   &[cmd-parts (Array.copy-map &(fn [x] (Box.init @x)) args)])))]
+    (let-do [msg (RESP.encode-command &cmd args)]
       (StringBuf.append-str (buf p) &msg)
       (set-count! p (+ @(count p) 1)))))
 
