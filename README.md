@@ -52,6 +52,61 @@ The library provides thin wrappers around all standard Redis commands through
 The RESP type supports recursive arrays via `Box`, so nested structures
 (e.g. from `XRANGE` or `COMMAND`) are decoded faithfully.
 
+### Transactions
+
+`with-transaction` wraps commands in `MULTI`/`EXEC` and sends the whole thing in
+one round trip. It returns a `TransactionResult`, because a transaction has
+three outcomes a caller has to tell apart:
+
+```clojure
+(match (with-transaction &r
+         (incr @"visits")
+         (hset @"user:1" @"seen" @"now"))
+  (Result.Success (TransactionResult.Executed replies))
+    (println* "ran " (Array.length &replies) " commands")
+  (Result.Success (TransactionResult.Aborted))
+    (println* "a watched key changed, nothing ran")
+  (Result.Success (TransactionResult.QueueFailed errs))
+    (println* "rejected before EXEC: "
+              (QueueError.message (Array.unsafe-nth &errs 0)))
+  (Result.Error e) (IO.errorln &e))
+```
+
+`Executed` carries one reply per command, in order. Redis does not roll back a
+command that fails at runtime, so a `WRONGTYPE` shows up as a `RESP.Err` element
+inside `Executed` rather than aborting anything.
+
+`QueueFailed` is the other error: the server refused a command outright — an
+unknown name, the wrong number of arguments — and ran none of them. Each
+`QueueError` says which command by index and what the server said.
+
+#### Optimistic locking
+
+`Aborted` is what makes `WATCH` useful. Watch the keys you are about to read,
+read them, then run the transaction: if anything else touched a watched key in
+between, Redis aborts and you try again with fresh values.
+
+```clojure
+(defn transfer [r from to amount]
+  (let-do [done false]
+    (while-do (not done)
+      (ignore (Redis.watch r @from))
+      (match (Redis.get r @from)
+        (Result.Success (RESP.Str balance))
+          (if (< (Maybe.from (Int.from-string &balance) 0) amount)
+            (do (ignore (Redis.unwatch r)) (set! done true))
+            (match (with-transaction r
+                     (decrby @from (Int.str amount))
+                     (incrby @to (Int.str amount)))
+              (Result.Success (TransactionResult.Aborted)) ()
+              _ (set! done true)))
+        _ (do (ignore (Redis.unwatch r)) (set! done true))))))
+```
+
+Only `Aborted` retries — an `Error` or a `QueueFailed` will not fix itself by
+looping. For an explicit accumulator instead of the macro, build a
+`RedisPipeline` and hand it to `Redis.transaction-exec`.
+
 ### Pub/sub
 
 After subscribing you can receive the stream of pushed messages with

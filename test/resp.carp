@@ -75,6 +75,53 @@ frame can be fed to `feed-n` the way many small socket reads deliver it.")
         (set! i end)))
     chunks))
 
+(doc tx-feed
+  "reads a transaction's whole reply stream the way `transaction-exec` does,
+without a server: `n + 2` replies through the same buffered read.")
+(defn tx-feed [wire n] (feed-n &[@wire] (+ n 2)))
+
+(defn tx-result [wire n]
+  (let [p (tx-feed wire n)] (TransactionResult.decode-replies (Pair.a &p) n)))
+
+(doc tx-leftover
+  "the bytes the read leaves unconsumed, so a path that reads too few replies
+shows up as leftovers a later command would misread.")
+(defn tx-leftover [wire n] (let [p (tx-feed wire n)] @(Pair.b &p)))
+
+(defn tx-err? [wire n] (Result.error? &(tx-result wire n)))
+
+(defn tx-executed-count [wire n]
+  (match (tx-result wire n)
+    (Result.Success (TransactionResult.Executed a)) (Array.length &a)
+    _ -1))
+
+(defn tx-executed-nth [wire n i]
+  (match (tx-result wire n)
+    (Result.Success (TransactionResult.Executed a)) @(Array.unsafe-nth &a i)
+    _ (RESP.Err @"not executed")))
+
+(defn tx-aborted? [wire n]
+  (match (tx-result wire n)
+    (Result.Success (TransactionResult.Aborted)) true
+    _ false))
+
+(defn tx-queue-count [wire n]
+  (match (tx-result wire n)
+    (Result.Success (TransactionResult.QueueFailed es)) (Array.length &es)
+    _ -1))
+
+(defn tx-queue-index [wire n i]
+  (match (tx-result wire n)
+    (Result.Success (TransactionResult.QueueFailed es))
+      @(QueueError.index (Array.unsafe-nth &es i))
+    _ -1))
+
+(defn tx-queue-message [wire n i]
+  (match (tx-result wire n)
+    (Result.Success (TransactionResult.QueueFailed es))
+      @(QueueError.message (Array.unsafe-nth &es i))
+    _ @""))
+
 (deftest test
   (assert-equal test "$-1\r\n" &(str &(RESP.Null)) "encode Null")
 
@@ -992,4 +1039,136 @@ frame can be fed to `feed-n` the way many small socket reads deliver it.")
         [(Box.init (RESP.Str @"message"))
          (Box.init (RESP.Null))
          (Box.init (RESP.Str @"payload"))]))
-    "message reply with a Null channel is still rejected"))
+    "message reply with a Null channel is still rejected")
+
+  ; --- transaction framing ---
+  (assert-true test
+    (let-do [p (RedisPipeline.begin)]
+      (RedisPipeline.add &p @"SET" &[(to-redis @"k") (to-redis @"v")])
+      (RedisPipeline.add &p @"GET" &[(to-redis @"k")])
+      (= &(RedisPipeline.transaction-str &p)
+         "*1\r\n$5\r\nMULTI\r\n*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1\r\nv\r\n*2\r\n$3\r\nGET\r\n$1\r\nk\r\n*1\r\n$4\r\nEXEC\r\n"))
+    "transaction-str brackets the queued commands with MULTI and EXEC")
+
+  (assert-equal test
+    "*1\r\n$5\r\nMULTI\r\n*1\r\n$4\r\nEXEC\r\n"
+    &(RedisPipeline.transaction-str &(RedisPipeline.begin))
+    "an empty transaction is still a MULTI and an EXEC on the wire")
+
+  ; --- transaction reply interpretation ---
+  (assert-equal test
+    2
+    (tx-executed-count
+      "+OK\r\n+QUEUED\r\n+QUEUED\r\n*2\r\n:1\r\n$3\r\nfoo\r\n"
+      2)
+    "a transaction that ran decodes to Executed with one reply per command")
+
+  (assert-equal test
+    ":1\r\n"
+    &(str
+      &(tx-executed-nth
+        "+OK\r\n+QUEUED\r\n+QUEUED\r\n*2\r\n:1\r\n$3\r\nfoo\r\n"
+        2
+        0))
+    "Executed carries the replies in order")
+
+  (assert-equal test
+    ""
+    &(tx-leftover "+OK\r\n+QUEUED\r\n+QUEUED\r\n*2\r\n:1\r\n$3\r\nfoo\r\n" 2)
+    "the happy path consumes every reply")
+
+  (assert-true test
+    (tx-aborted? "+OK\r\n+QUEUED\r\n*-1\r\n" 1)
+    "a null EXEC array decodes to Aborted, not to an empty Executed")
+
+  (assert-equal test
+    "+PONG\r\n"
+    &(tx-leftover "+OK\r\n+QUEUED\r\n*-1\r\n+PONG\r\n" 1)
+    "an aborted transaction consumes its replies and no more")
+
+  (assert-equal test
+    1
+    (tx-queue-count
+      "+OK\r\n+QUEUED\r\n-ERR unknown command 'BOGUS'\r\n-EXECABORT Transaction discarded because of previous errors.\r\n"
+      2)
+    "EXECABORT decodes to QueueFailed, not to an error")
+
+  (assert-equal test
+    1
+    (tx-queue-index
+      "+OK\r\n+QUEUED\r\n-ERR unknown command 'BOGUS'\r\n-EXECABORT Transaction discarded because of previous errors.\r\n"
+      2
+      0)
+    "QueueFailed records which command the server refused")
+
+  (assert-equal test
+    "ERR unknown command 'BOGUS'"
+    &(tx-queue-message
+      "+OK\r\n+QUEUED\r\n-ERR unknown command 'BOGUS'\r\n-EXECABORT Transaction discarded because of previous errors.\r\n"
+      2
+      0)
+    "QueueFailed records what the server said")
+
+  (assert-equal test
+    2
+    (tx-queue-index
+      "+OK\r\n-ERR a\r\n+QUEUED\r\n-ERR b\r\n-EXECABORT nope\r\n"
+      3
+      1)
+    "every command refused at queue time is recorded, by index")
+
+  (assert-equal test
+    "+PONG\r\n"
+    &(tx-leftover
+      "+OK\r\n+QUEUED\r\n-ERR unknown command 'BOGUS'\r\n-EXECABORT nope\r\n+PONG\r\n"
+      2)
+    "a queue failure consumes its replies and no more")
+
+  (assert-true test
+    (tx-err? "+OK\r\n+QUEUED\r\n-ERR something went wrong\r\n" 1)
+    "an EXEC error with nothing refused at queue time is an error, not QueueFailed")
+
+  (assert-true test
+    (tx-err? "-ERR MULTI calls can not be nested\r\n:1\r\n+OK\r\n" 1)
+    "a nested MULTI is an error")
+
+  (assert-equal test
+    "+PONG\r\n"
+    &(tx-leftover
+      "-ERR MULTI calls can not be nested\r\n:1\r\n+OK\r\n+PONG\r\n"
+      1)
+    "a failed MULTI consumes its replies and no more")
+
+  (assert-equal test
+    "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
+    &(str
+      &(tx-executed-nth
+        "+OK\r\n+QUEUED\r\n+QUEUED\r\n*2\r\n+OK\r\n-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"
+        2
+        1))
+    "a command that failed at runtime survives inside Executed as a RESP.Err")
+
+  (assert-true test
+    (tx-err? "+OK\r\n+QUEUED\r\n+QUEUED\r\n" 2)
+    "a truncated reply stream is an error")
+
+  (assert-true test
+    (tx-err? "+OK\r\n+QUEUED\r\n+QUEUED\r\n*1\r\n:1\r\n" 2)
+    "an EXEC array shorter than the number of queued commands is an error")
+
+  (assert-true test
+    (tx-err? "+OK\r\n+QUEUED\r\n:5\r\n" 1)
+    "an EXEC reply that is neither an array nor an error is an error")
+
+  (assert-equal test
+    0
+    (tx-executed-count "+OK\r\n*0\r\n" 0)
+    "a transaction with no commands decodes to an empty Executed")
+
+  (assert-true test
+    (tx-aborted? "+OK\r\n*-1\r\n" 0)
+    "a transaction with no commands can still be aborted by WATCH")
+
+  (assert-true test
+    (Result.error? &(TransactionResult.decode-replies &(the (Array RESP) []) -2))
+    "a negative command count is an error, not an out-of-bounds read"))

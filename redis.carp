@@ -867,7 +867,15 @@ macro converts hyphens to spaces automatically, but `add` does not.")
   (defn add [p cmd args]
     (let-do [msg (RESP.encode-command &cmd args)]
       (StringBuf.append-str (buf p) &msg)
-      (set-count! p (+ @(count p) 1)))))
+      (set-count! p (+ @(count p) 1))))
+
+  (doc transaction-str "the wire bytes that run the batch as one transaction:
+`MULTI`, every added command, then `EXEC`.")
+  (defn transaction-str [p]
+    (String.concat
+      &[(RESP.encode-command "MULTI" &(the (Array RESP) []))
+        (StringBuf.str (buf p))
+        (RESP.encode-command "EXEC" &(the (Array RESP) []))])))
 
 (defmodule Redis
   (doc pipeline-exec
@@ -918,13 +926,126 @@ Returns `(Result (Array RESP) String)`.
           (list 'Redis.pipeline-exec r '(ref __pipeline))
           (cons 'do (pipeline-cmds- cmds)))))
 
+(deftype QueueError [index Int
+                     message String])
+
+(deftype TransactionResult
+  (Executed [(Array RESP)])
+  (Aborted [])
+  (QueueFailed [(Array QueueError)]))
+
+(defmodule TransactionResult
+  (hidden queue-errors)
+  (private queue-errors)
+  (defn queue-errors [replies n]
+    (let-do [errs (the (Array QueueError) [])]
+      (for [i 0 n]
+        (match-ref (Array.unsafe-nth replies (Int.inc i))
+          (RESP.Err e) (Array.push-back! &errs (QueueError.init i @e))
+          _ ()))
+      errs))
+
+  (hidden unbox-all)
+  (private unbox-all)
+  (defn unbox-all [a] (Array.copy-map &(fn [b] @(Box.peek b)) a))
+
+  (doc decode-replies
+    "decodes the `n + 2` replies to a transaction over `n` queued commands.
+
+`replies` must hold `MULTI`’s reply, one queue acknowledgement per command and
+`EXEC`’s reply, in that order — see
+[`transaction-exec`](#transaction-exec), which is what normally produces them.
+
+An `EXEC` array becomes `Executed`, carrying one reply per command; those
+replies are passed through untouched, so a command that failed at runtime (e.g.
+`WRONGTYPE`) stays a `RESP.Err` element, exactly as Redis reports it. A null
+`EXEC` array becomes `Aborted`, meaning a `WATCH`ed key changed. An `EXEC` error
+becomes `QueueFailed` with the index and message of every command the server
+refused to queue.
+
+Returns an `Error` if `n` is negative, if `MULTI` itself failed, if `EXEC`
+errored without any command having failed to queue, or if the reply stream does
+not have the shape the protocol guarantees — a wrong number of replies, or an
+`EXEC` array whose length does not match the number of queued commands.")
+  (defn decode-replies [replies n]
+    (if (or (< n 0) (/= (Array.length replies) (+ n 2)))
+      (Result.Error
+        (fmt
+          "expected %d transaction replies for %d commands, got %d"
+          (+ n 2)
+          n
+          (Array.length replies)))
+      (match-ref (Array.unsafe-nth replies 0)
+        (RESP.Err e) (Result.Error (fmt "MULTI failed: %s" e))
+        _
+          (match-ref (Array.unsafe-nth replies (Int.inc n))
+            (RESP.Null) (Result.Success (Aborted))
+            (RESP.Arr a)
+              (if (/= (Array.length a) n)
+                (Result.Error
+                  (fmt
+                    "EXEC returned %d replies for %d queued commands"
+                    (Array.length a)
+                    n))
+                (Result.Success (Executed (unbox-all a))))
+            (RESP.Err e)
+              (let [errs (queue-errors replies n)]
+                (if (Array.empty? &errs)
+                  (Result.Error (fmt "EXEC failed: %s" e))
+                  (Result.Success (QueueFailed errs))))
+            _ (Result.Error @"EXEC reply is neither an array nor an error"))))))
+
+(defmodule Redis
+  (doc transaction-exec
+    "runs all commands in the pipeline as a single transaction.
+
+Sends `MULTI`, every queued command and `EXEC` in one write, then reads all
+`n + 2` replies before interpreting them with
+[`decode-replies`](#decode-replies) — even on the failure paths, so the
+connection is never left holding replies a later command would mistake for its
+own.
+
+Returns `(Result TransactionResult String)`. Unlike
+[`pipeline-exec`](#pipeline-exec) an empty batch is still sent, because an empty
+transaction clears the keys the connection is watching.")
+  (defn transaction-exec [r p]
+    (let [n @(RedisPipeline.count p)]
+      (match (TcpStream.send (sock r) &(RedisPipeline.transaction-str p))
+        (Result.Error e) (Result.Error e)
+        (Result.Success _)
+          (match (read-n r (+ n 2))
+            (Result.Error e) (Result.Error e)
+            (Result.Success replies)
+              (TransactionResult.decode-replies &replies n))))))
+
+(doc with-transaction "runs Redis commands as a single transaction.
+
+Takes the same command forms as [`with-pipeline`](#with-pipeline), wrapping them
+in `MULTI`/`EXEC` and sending everything in one round trip.
+
+Returns `(Result TransactionResult String)`.
+
+```
+(with-transaction &r
+  (incr @\"counter\")
+  (set @\"key\" @\"val\"))
+```")
+(defmacro with-transaction [r :rest cmds]
+  (list 'let
+        (array '__pipeline '(RedisPipeline.begin))
+        (cons-last
+          (list 'Redis.transaction-exec r '(ref __pipeline))
+          (cons 'do (pipeline-cmds- cmds)))))
+
 (doc Redis "is a wrapper around Redis connections. It supports opening a
 connection using [`open`](#open) or [`open-on`](#open-on), reading from and
 sending to the connection (using [`read`](#read) and [`send`](#send),
 respectively), and contains thin wrappers around all Redis commands through 7.2.
 
 Commands can also be batched using [`pipeline-exec`](#pipeline-exec) or the
-[`with-pipeline`](#with-pipeline) macro to reduce round-trip latency.
+[`with-pipeline`](#with-pipeline) macro to reduce round-trip latency, or run
+atomically using [`transaction-exec`](#transaction-exec) and the
+[`with-transaction`](#with-transaction) macro.
 
 ```
 (match (Redis.open \"127.0.0.1\")
@@ -984,5 +1105,29 @@ turns each raw `RESP` value into one of these variants using
             (println* \"subscribed to \" &channel)
           _ (println* \"other pub/sub reply\"))
       (Result.Error e) (IO.errorln &e))
+  (Result.Error e) (IO.errorln &e))
+```")
+(doc TransactionResult "is the outcome of a `MULTI`/`EXEC` transaction run with
+[`transaction-exec`](#transaction-exec) or the
+[`with-transaction`](#with-transaction) macro. The three variants are the three
+things Redis can do with a transaction, and they need telling apart: `Executed`
+means it ran and carries one reply per command, `Aborted` means a `WATCH`ed key
+changed underneath it, and `QueueFailed` means the server refused one or more
+commands before `EXEC` and ran none of them.
+
+A command that failed at runtime — `WRONGTYPE`, say — does not abort a
+transaction: Redis runs the rest and reports the failure in place, so it arrives
+as a `RESP.Err` element inside `Executed`.
+
+```
+(match (with-transaction &r
+         (incr @\"counter\")
+         (set @\"key\" @\"val\"))
+  (Result.Success (TransactionResult.Executed replies))
+    (println* \"ran \" (Array.length &replies) \" commands\")
+  (Result.Success (TransactionResult.Aborted))
+    (println* \"a watched key changed; retry\")
+  (Result.Success (TransactionResult.QueueFailed errs))
+    (println* \"rejected before EXEC: \" &(Array.length &errs))
   (Result.Error e) (IO.errorln &e))
 ```")
