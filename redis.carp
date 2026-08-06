@@ -23,6 +23,17 @@
             (Array.push-back! &parts (str (Box.peek (Array.unsafe-nth &a i)))))
           (String.concat &parts))))
 
+  (doc max-depth
+    "the deepest array nesting the decoders accept; input that nests deeper is
+rejected as malformed.
+
+Redis replies nest at most about five levels — `XREAD` is the deepest of the
+standard ones — so this leaves a wide margin. The bound is enforced while
+decoding rather than checked afterwards because `RESP` is a recursive type:
+copying or freeing a value recurses over it too, so an over-deep value would
+overflow the stack when it was dropped even if it had decoded successfully.")
+  (def max-depth 32)
+
   (hidden find-cr-after)
   (private find-cr-after)
   ; index of the first \r strictly after `x`, within `slen` bytes, or -1. Mirrors
@@ -36,6 +47,21 @@
         (when (= (String.char-at s i) \return) (set! found i))
         (set! i (Int.inc i)))
       found))
+
+  (hidden fatal)
+  (private fatal)
+  (defn fatal [msg] (Error (Pair.init msg true)))
+
+  (hidden needs-more)
+  (private needs-more)
+  (defn needs-more [msg] (Error (Pair.init msg false)))
+
+  (hidden bad-header)
+  (private bad-header)
+  ; a header line whose CRLF has not arrived may still be completed by more
+  ; input; one that has its CRLF and still does not parse never will
+  (defn bad-header [s pos slen msg]
+    (if (= (find-cr-after s pos slen) -1) (needs-more msg) (fatal msg)))
 
   (hidden parse-bulk-header)
   (private parse-bulk-header)
@@ -51,10 +77,11 @@
   (private decode-one-at)
   ; decode the value at `pos` in a buffer of length `slen`. `slen` is threaded in
   ; rather than recomputed so a caller decoding many values stays linear.
-  (defn decode-one-at [s pos slen]
+  ; `depth` is the array nesting still allowed; errors carry a fatality flag.
+  (defn decode-one-at [s pos slen depth]
     ; out of input mid-value: error rather than pad the array with a phantom Null
     (if (>= pos slen)
-      (Error @"Unexpected end of RESP input")
+      (needs-more @"Unexpected end of RESP input")
       (case (String.char-at s pos)
             \+
             ; search from pos (exclusive), not rest-start, so the CRLF of an
@@ -62,7 +89,7 @@
             (let [rest-start (+ pos 1)
                   idx (find-cr-after s pos slen)]
               (if (= idx -1)
-                (Error @"Malformed simple string")
+                (bad-header s pos slen @"Malformed simple string")
                 (Success
                   (Pair.init
                     (Str (String.byte-slice s rest-start idx))
@@ -71,7 +98,7 @@
             (let [rest-start (+ pos 1)
                   idx (find-cr-after s pos slen)]
               (if (= idx -1)
-                (Error @"Malformed error string")
+                (bad-header s pos slen @"Malformed error string")
                 (Success
                   (Pair.init
                     (Err (String.byte-slice s rest-start idx))
@@ -83,13 +110,13 @@
             (let [rest-start (+ pos 1)
                   idx (find-cr-after s rest-start slen)]
               (if (= idx -1)
-                (Error @"Malformed integer")
+                (bad-header s pos slen @"Malformed integer")
                 (match (Int.from-string &(String.byte-slice s rest-start idx))
-                  (Maybe.Nothing) (Error @"Could not parse integer in result.")
+                  (Maybe.Nothing) (fatal @"Could not parse integer in result.")
                   (Maybe.Just n) (Success (Pair.init (Integer n) (+ idx 2))))))
             \$
             (match (parse-bulk-header s pos slen)
-              (Maybe.Nothing) (Error @"Malformed bulk string")
+              (Maybe.Nothing) (bad-header s pos slen @"Malformed bulk string")
               (Maybe.Just header)
                 (let [data-start @(Pair.a &header)
                       len @(Pair.b &header)
@@ -98,11 +125,11 @@
                     (= len -1)
                     (Success (Pair.init (Null) data-start))
                     (< len 0)
-                    (Error @"Malformed bulk string: negative length")
+                    (fatal @"Malformed bulk string: negative length")
                     ; payload + trailing CRLF must be present; comparing len
                     ; alone avoids overflow on a huge declared length
                     (> len (- available 2))
-                    (Error @"Incomplete bulk string")
+                    (needs-more @"Incomplete bulk string")
                     (Success
                       (Pair.init
                         (Str (String.byte-slice s data-start (+ data-start len)))
@@ -111,45 +138,51 @@
             (let [rest-start (+ pos 1)
                   idx (find-cr-after s rest-start slen)]
               (if (= idx -1)
-                (Error @"Malformed array")
+                (bad-header s pos slen @"Malformed array")
                 (match (Int.from-string &(String.byte-slice s rest-start idx))
                   (Maybe.Nothing)
-                    (Error @"Error decoding array: does not start with length!")
+                    (fatal @"Error decoding array: does not start with length!")
                   (Maybe.Just len)
                     (cond
                       (= len -1)
                       (Success (Pair.init (Null) (+ idx 2)))
+                      (<= depth 0)
+                      (fatal
+                        (fmt "RESP array nests deeper than %d levels" max-depth))
                       (= len 0)
                       (Success (Pair.init (Arr []) (+ idx 2)))
                       ; build incrementally so the error path frees only decoded
                       ; boxes, never uninitialized slots
                       (let-do [cur (+ idx 2)
                                a []
-                               err @""]
+                               err (the (Maybe (Pair String Bool))
+                                        (Maybe.Nothing))]
                         (for [i 0 len]
-                          (match (decode-one-at s cur slen)
-                            (Result.Error e) (do (set! err e) (break))
+                          (match (decode-one-at s cur slen (Int.dec depth))
+                            (Result.Error e) (do (set! err (Just e)) (break))
                             (Result.Success p)
                               (do
                                 (Array.push-back! &a (Box.init @(Pair.a &p)))
                                 (set! cur @(Pair.b &p)))))
-                        (if (= &err "")
-                          (Success (Pair.init (Arr a) cur))
-                          (Error err)))))))
-            (Error
+                        (match err
+                          (Maybe.Nothing) (Success (Pair.init (Arr a) cur))
+                          (Maybe.Just e) (Error e)))))))
+            (fatal
               (fmt "Malformed RESP data: got %s"
                    &(String.byte-slice s pos (+ pos 1)))))))
 
   (hidden decode-one)
   (private decode-one)
-  (defn decode-one [s pos] (decode-one-at s pos (String.length s)))
+  (defn decode-one [s pos] (decode-one-at s pos (String.length s) max-depth))
 
-  (doc from-string "converts a RESP string into a `RESP` data structure.")
+  (doc from-string "converts a RESP string into a `RESP` data structure.
+
+Arrays nested deeper than [`max-depth`](#max-depth) are rejected as malformed.")
   (defn from-string [s]
     (if (empty? s)
       (Success (Null))
       (match (decode-one s 0)
-        (Result.Error e) (Error e)
+        (Result.Error e) (Error @(Pair.a &e))
         (Result.Success p) (Success @(Pair.a &p)))))
 
   (doc decode-n "decodes up to `n` RESP values from string `s`.
@@ -183,7 +216,7 @@ that coalesced into the same read — buffered until it is needed. Returns an
 input is malformed or because a value is truncated mid-way.")
   (defn decode-first [s]
     (match (decode-one s 0)
-      (Result.Error e) (Result.Error e)
+      (Result.Error e) (Result.Error @(Pair.a &e))
       (Result.Success p)
         (Result.Success
           (Pair.init @(Pair.a &p)
@@ -198,7 +231,10 @@ stops at the first incomplete or malformed value, so the array may hold fewer
 than `n` values and the offset then marks the start of the still-unconsumed
 tail. Unlike [`decode-first`](#decode-first) it consumes many values in a single
 left-to-right pass without re-slicing between them, which is what lets a
-buffered reader stay linear instead of quadratic.")
+buffered reader stay linear instead of quadratic.
+
+The returned offset alone does not say why decoding stopped; ask
+[`fatal-error-at`](#fatal-error-at) about it before waiting for more bytes.")
   (defn decode-available [s start n]
     (let-do [results []
              cur start
@@ -207,7 +243,7 @@ buffered reader stay linear instead of quadratic.")
       (while (and reading (< (Array.length &results) n))
         (if (>= cur len)
           (set! reading false)
-          (match (decode-one-at s cur len)
+          (match (decode-one-at s cur len max-depth)
             (Result.Error _)
             (set! reading false)
             (Result.Success p)
@@ -218,6 +254,20 @@ buffered reader stay linear instead of quadratic.")
                 (Array.push-back! &results @(Pair.a &p))
                 (set! cur @(Pair.b &p)))))))
       (Pair.init results cur)))
+
+  (doc fatal-error-at
+    "the decoder error for the value at `start` in `s`, if no amount of further
+input could ever make it decode; else `Nothing`.
+
+This is what separates a broken stream from a merely truncated one. A reader
+that has not yet assembled a complete value should keep waiting on `Nothing`
+and give up on `Just` — the input is malformed, or it nests deeper than
+[`max-depth`](#max-depth), and more bytes will not help.")
+  (defn fatal-error-at [s start slen]
+    (match (decode-one-at s start slen max-depth)
+      (Result.Error e)
+        (if @(Pair.b &e) (Maybe.Just @(Pair.a &e)) (Maybe.Nothing))
+      (Result.Success _) (Maybe.Nothing)))
 
   (doc bulk-fill-target
     "the buffer length the partial bulk string at `start` needs before it decodes, when its header has arrived but its payload has not; else `Nothing`.")
@@ -283,7 +333,10 @@ For variable port numbers please check out [`open-on`](#open-on).")
 Decodes out of the connection's own read buffer first, pulling more from the
 socket only when it does not yet hold `n` complete values. Any bytes past the
 `n`th value — a following reply that arrived in the same read — are stored back
-on the connection so a later read can consume them instead of losing them.")
+on the connection so a later read can consume them instead of losing them.
+
+Fails as soon as the buffer holds a value that can never decode, rather than
+waiting for bytes that could not repair it.")
   (defn read-n [r n]
     (let-do [acc @(buf r)
              results (the (Array RESP) [])
@@ -300,6 +353,10 @@ on the connection so a later read can consume them instead of losing them.")
           ; multi-value or pipelined read linear instead of quadratic
           (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
         (when (< (Array.length &results) (the Int n))
+          (match (RESP.fatal-error-at &acc 0 (String.length &acc))
+            (Maybe.Just e) (do (set! err e) (set! reading false))
+            (Maybe.Nothing) ()))
+        (when (and reading (< (Array.length &results) (the Int n)))
           (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
             (Maybe.Just target)
               (let-do [bytes (String.to-bytes &acc)
