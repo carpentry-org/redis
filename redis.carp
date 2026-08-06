@@ -963,16 +963,17 @@ replies are passed through untouched, so a command that failed at runtime (e.g.
 becomes `QueueFailed` with the index and message of every command the server
 refused to queue.
 
-Returns an `Error` if `MULTI` itself failed, if `EXEC` errored without any
-command having failed to queue, or if the reply stream does not have the shape
-the protocol guarantees — a wrong number of replies, or an `EXEC` array whose
-length does not match the number of queued commands.")
+Returns an `Error` if `n` is negative, if `MULTI` itself failed, if `EXEC`
+errored without any command having failed to queue, or if the reply stream does
+not have the shape the protocol guarantees — a wrong number of replies, or an
+`EXEC` array whose length does not match the number of queued commands.")
   (defn decode-replies [replies n]
-    (if (/= (Array.length replies) (+ n 2))
+    (if (or (< n 0) (/= (Array.length replies) (+ n 2)))
       (Result.Error
         (fmt
-          "expected %d transaction replies, got %d"
+          "expected %d transaction replies for %d commands, got %d"
           (+ n 2)
+          n
           (Array.length replies)))
       (match-ref (Array.unsafe-nth replies 0)
         (RESP.Err e) (Result.Error (fmt "MULTI failed: %s" e))
@@ -1120,8 +1121,8 @@ as a `RESP.Err` element inside `Executed`.
 
 ```
 (match (with-transaction &r
-         (incr \"counter\")
-         (set \"key\" \"val\"))
+         (incr @\"counter\")
+         (set @\"key\" @\"val\"))
   (Result.Success (TransactionResult.Executed replies))
     (println* \"ran \" (Array.length &replies) \" commands\")
   (Result.Success (TransactionResult.Aborted))

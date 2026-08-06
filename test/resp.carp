@@ -1167,4 +1167,8 @@ shows up as leftovers a later command would misread.")
 
   (assert-true test
     (tx-aborted? "+OK\r\n*-1\r\n" 0)
-    "a transaction with no commands can still be aborted by WATCH"))
+    "a transaction with no commands can still be aborted by WATCH")
+
+  (assert-true test
+    (Result.error? &(TransactionResult.decode-replies &(the (Array RESP) []) -2))
+    "a negative command count is an error, not an out-of-bounds read"))

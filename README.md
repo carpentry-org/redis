@@ -89,18 +89,18 @@ between, Redis aborts and you try again with fresh values.
 ```clojure
 (defn transfer [r from to amount]
   (let-do [done false]
-    (while (not done)
-      (Redis.watch r @from)
+    (while-do (not done)
+      (ignore (Redis.watch r @from))
       (match (Redis.get r @from)
         (Result.Success (RESP.Str balance))
           (if (< (Maybe.from (Int.from-string &balance) 0) amount)
-            (do (Redis.unwatch r) (set! done true))
+            (do (ignore (Redis.unwatch r)) (set! done true))
             (match (with-transaction r
                      (decrby @from (Int.str amount))
                      (incrby @to (Int.str amount)))
               (Result.Success (TransactionResult.Aborted)) ()
               _ (set! done true)))
-        _ (do (Redis.unwatch r) (set! done true))))))
+        _ (do (ignore (Redis.unwatch r)) (set! done true))))))
 ```
 
 Only `Aborted` retries — an `Error` or a `QueueFailed` will not fix itself by
