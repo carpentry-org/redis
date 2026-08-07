@@ -661,7 +661,6 @@ shows up as leftovers a later command would misread.")
     (decode-err? "$-2\r\nxx\r\n")
     "reject bulk string with negative length")
 
-  ; --- nesting depth bound ---
   (assert-equal test 32 RESP.max-depth "the documented nesting bound")
 
   (assert-true test
@@ -672,7 +671,6 @@ shows up as leftovers a later command would misread.")
     (decode-err? &(nest (Int.inc RESP.max-depth)))
     "an array nested one level past max-depth is rejected")
 
-  ; 5000 levels is ~20kB of input and far deeper than the C stack can recurse
   (assert-true test
     (decode-err? &(nest 5000))
     "deeply nested input is rejected rather than decoded")
@@ -685,7 +683,6 @@ shows up as leftovers a later command would misread.")
       (Result.Error e) e)
     "an XREAD-shaped reply nested five levels still round-trips")
 
-  ; --- fatal versus incomplete: what a streaming reader waits on ---
   (assert-true test
     (fatal-at? "+OK\r\nX+PONG\r\n" 5)
     "a byte that names no RESP type is fatal")

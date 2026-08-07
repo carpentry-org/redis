@@ -24,14 +24,8 @@
           (String.concat &parts))))
 
   (doc max-depth
-    "the deepest array nesting the decoders accept; input that nests deeper is
-rejected as malformed.
-
-Redis replies nest at most about five levels — `XREAD` is the deepest of the
-standard ones — so this leaves a wide margin. The bound is enforced while
-decoding rather than checked afterwards because `RESP` is a recursive type:
-copying or freeing a value recurses over it too, so an over-deep value would
-overflow the stack when it was dropped even if it had decoded successfully.")
+    "the deepest array nesting the decoders accept; deeper input is rejected as
+malformed.")
   (def max-depth 32)
 
   (hidden find-cr-after)
@@ -58,8 +52,7 @@ overflow the stack when it was dropped even if it had decoded successfully.")
 
   (hidden bad-header)
   (private bad-header)
-  ; a header line whose CRLF has not arrived may still be completed by more
-  ; input; one that has its CRLF and still does not parse never will
+  ; a header missing its CRLF may still be completed; one that has it never will
   (defn bad-header [s pos slen msg]
     (if (= (find-cr-after s pos slen) -1) (needs-more msg) (fatal msg)))
 
@@ -77,7 +70,7 @@ overflow the stack when it was dropped even if it had decoded successfully.")
   (private decode-one-at)
   ; decode the value at `pos` in a buffer of length `slen`. `slen` is threaded in
   ; rather than recomputed so a caller decoding many values stays linear.
-  ; `depth` is the array nesting still allowed; errors carry a fatality flag.
+  ; `depth` is the array nesting still allowed.
   (defn decode-one-at [s pos slen depth]
     ; out of input mid-value: error rather than pad the array with a phantom Null
     (if (>= pos slen)
@@ -231,10 +224,7 @@ stops at the first incomplete or malformed value, so the array may hold fewer
 than `n` values and the offset then marks the start of the still-unconsumed
 tail. Unlike [`decode-first`](#decode-first) it consumes many values in a single
 left-to-right pass without re-slicing between them, which is what lets a
-buffered reader stay linear instead of quadratic.
-
-The returned offset alone does not say why decoding stopped; ask
-[`fatal-error-at`](#fatal-error-at) about it before waiting for more bytes.")
+buffered reader stay linear instead of quadratic.")
   (defn decode-available [s start n]
     (let-do [results []
              cur start
@@ -257,12 +247,7 @@ The returned offset alone does not say why decoding stopped; ask
 
   (doc fatal-error-at
     "the decoder error for the value at `start` in `s`, if no amount of further
-input could ever make it decode; else `Nothing`.
-
-This is what separates a broken stream from a merely truncated one. A reader
-that has not yet assembled a complete value should keep waiting on `Nothing`
-and give up on `Just` — the input is malformed, or it nests deeper than
-[`max-depth`](#max-depth), and more bytes will not help.")
+input could ever make it decode; else `Nothing`.")
   (defn fatal-error-at [s start slen]
     (match (decode-one-at s start slen max-depth)
       (Result.Error e)
@@ -335,8 +320,7 @@ socket only when it does not yet hold `n` complete values. Any bytes past the
 `n`th value — a following reply that arrived in the same read — are stored back
 on the connection so a later read can consume them instead of losing them.
 
-Fails as soon as the buffer holds a value that can never decode, rather than
-waiting for bytes that could not repair it.")
+Fails as soon as the buffer holds a value that can never decode.")
   (defn read-n [r n]
     (let-do [acc @(buf r)
              results (the (Array RESP) [])
