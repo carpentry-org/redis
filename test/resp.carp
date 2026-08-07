@@ -8,6 +8,17 @@
 
 (defn pubsub-err? [r] (Result.error? &(PubSubMessage.decode-message r)))
 
+(defn fatal-at? [s start]
+  (match (RESP.fatal-error-at s start (String.length s))
+    (Maybe.Just _) true
+    (Maybe.Nothing) false))
+
+(doc nest "`+OK` wrapped in `depth` single-element arrays.")
+(defn nest [depth]
+  (let-do [s @""]
+    (for [i 0 depth] (set! s (String.append &s "*1\r\n")))
+    (String.append &s "+OK\r\n")))
+
 (defn roundtrip [r]
   (let [encoded (str r)]
     (match (RESP.from-string &encoded)
@@ -51,6 +62,10 @@ length-aware fill for a split bulk. Returns the decoded values and the leftover.
           (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
         (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
       (when (< (Array.length &results) n)
+        (match (RESP.fatal-error-at &acc 0 (String.length &acc))
+          (Maybe.Just _) (set! reading false)
+          (Maybe.Nothing) ()))
+      (when (and reading (< (Array.length &results) n))
         (if (>= ci (Array.length chunks))
           (set! reading false)
           (let [target (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
@@ -646,6 +661,74 @@ shows up as leftovers a later command would misread.")
     (decode-err? "$-2\r\nxx\r\n")
     "reject bulk string with negative length")
 
+  (assert-equal test 32 RESP.max-depth "the documented nesting bound")
+
+  (assert-true test
+    (decode-ok? &(nest RESP.max-depth))
+    "an array nested exactly max-depth levels decodes")
+
+  (assert-true test
+    (decode-err? &(nest (Int.inc RESP.max-depth)))
+    "an array nested one level past max-depth is rejected")
+
+  (assert-true test
+    (decode-err? &(nest 5000))
+    "deeply nested input is rejected rather than decoded")
+
+  (assert-equal test
+    "*1\r\n*2\r\n$6\r\nstream\r\n*1\r\n*2\r\n$3\r\n1-1\r\n*2\r\n$1\r\nf\r\n$1\r\nv\r\n"
+    &(match (RESP.from-string
+        "*1\r\n*2\r\n$6\r\nstream\r\n*1\r\n*2\r\n$3\r\n1-1\r\n*2\r\n$1\r\nf\r\n$1\r\nv\r\n")
+      (Result.Success r) (str &r)
+      (Result.Error e) e)
+    "an XREAD-shaped reply nested five levels still round-trips")
+
+  (assert-true test
+    (fatal-at? "+OK\r\nX+PONG\r\n" 5)
+    "a byte that names no RESP type is fatal")
+
+  (assert-true test (fatal-at? ":abc\r\n" 0) "an unparseable integer is fatal")
+
+  (assert-true test
+    (fatal-at? "*x\r\n" 0)
+    "an unparseable array length is fatal")
+
+  (assert-true test
+    (fatal-at? "$-2\r\nxx\r\n" 0)
+    "a negative bulk length is fatal")
+
+  (assert-true test
+    (fatal-at? "$\r\n" 0)
+    "a bulk header with no length is fatal")
+
+  (assert-true test
+    (fatal-at? "*2\r\n:1\r\nX" 0)
+    "a fatal element makes the array around it fatal")
+
+  (assert-true test
+    (fatal-at? &(nest 5000) 0)
+    "input past the nesting bound is fatal")
+
+  (assert-true test
+    (not (fatal-at? "+OK\r\n+PON" 5))
+    "a simple string cut short is incomplete, not fatal")
+
+  (assert-true test
+    (not (fatal-at? "+OK\r\n$5\r\nhe" 5))
+    "a bulk string cut short is incomplete, not fatal")
+
+  (assert-true test
+    (not (fatal-at? "*2\r\n:1\r\n" 0))
+    "an array missing its last element is incomplete, not fatal")
+
+  (assert-true test
+    (not (fatal-at? "" 0))
+    "an empty buffer is incomplete, not fatal")
+
+  (assert-true test
+    (not (fatal-at? "+OK\r\n" 0))
+    "a complete value is not fatal")
+
   ; --- decode-available: the offset-aware primitive behind buffered reads ---
   (assert-true test
     (let-do [p (RESP.decode-available "+OK\r\n:42\r\n" 0 2)]
@@ -718,6 +801,22 @@ shows up as leftovers a later command would misread.")
     (let-do [p (feed-n &[@"+A\r\n:1" @"0\r\n$2\r\nhi\r\n"] 3)]
       (= (Array.length (Pair.a &p)) 3))
     "buffered read: mixed coalesced and split values across chunks all decode")
+
+  (assert-true test
+    (let-do [p (feed-n &[@"+OK\r\nX" @"+PONG\r\n"] 2)]
+      (and (= (Array.length (Pair.a &p)) 1) (= (Pair.b &p) "X")))
+    "buffered read: a malformed byte stops the read where it stands")
+
+  (assert-true test
+    (let-do [p (feed-n &[(nest 40) @"+OK\r\n"] 1)]
+      (and (= (Array.length (Pair.a &p)) 0)
+           (= (String.length (Pair.b &p)) (String.length &(nest 40)))))
+    "buffered read: an over-deep reply stops the read instead of reading on")
+
+  (assert-true test
+    (let-do [p (feed-n &[@"+OK\r\n$5\r\nhe" @"llo\r\n"] 2)]
+      (and (= (Array.length (Pair.a &p)) 2) (String.empty? (Pair.b &p))))
+    "buffered read: a value cut short still waits for the chunk that finishes it")
 
   ; a large bulk split across many tiny reads must reassemble (the old quadratic
   ; path)
