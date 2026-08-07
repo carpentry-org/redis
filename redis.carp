@@ -78,13 +78,29 @@ malformed.")
       (Result.Error e) (Error e)
       (Result.Success next) (Success (Pair.init v next))))
 
+  (hidden parse-len)
+  (private parse-len)
+  ; an optional ‘-’ then digits in [from, to); unlike Int.from-string (strtol) it
+  ; takes no whitespace or ‘+’, and rejects rather than saturates on overflow
+  (defn parse-len [s from to]
+    (let-do [neg (and (< from to) (= (String.char-at s from) \-))
+             i (if neg (Int.inc from) from)
+             acc 0
+             ok (< i to)]
+      (while-do (and ok (< i to))
+        (let [d (Char.meaning &(String.char-at s i))]
+          (if (or (< d 0) (> acc (/ (- Int.MAX d) 10)))
+            (set! ok false)
+            (do (set! acc (+ (* acc 10) d)) (set! i (Int.inc i))))))
+      (if ok (Maybe.Just (if neg (Int.neg acc) acc)) (Maybe.Nothing))))
+
   (hidden parse-bulk-header)
   (private parse-bulk-header)
   (defn parse-bulk-header [s pos slen]
     (let [idx (find-cr-after s (+ pos 1) slen)]
       (if (or (= idx -1) (not (crlf-at? s idx slen)))
         (Maybe.Nothing)
-        (match (Int.from-string &(String.byte-slice s (+ pos 1) idx))
+        (match (parse-len s (+ pos 1) idx)
           (Maybe.Nothing) (Maybe.Nothing)
           (Maybe.Just len) (Maybe.Just (Pair.init (+ idx 2) len))))))
 
@@ -157,13 +173,15 @@ malformed.")
                   idx (find-cr-after s rest-start slen)]
               (if (= idx -1)
                 (bad-header s pos slen @"Malformed array")
-                (match (Int.from-string &(String.byte-slice s rest-start idx))
+                (match (parse-len s rest-start idx)
                   (Maybe.Nothing)
-                    (fatal @"Error decoding array: does not start with length!")
+                    (fatal @"Malformed array: invalid element count")
                   (Maybe.Just len)
                     (cond
                       (= len -1)
                         (value-at-crlf s idx slen @"Malformed array" (Null))
+                      (< len 0)
+                        (fatal @"Malformed array: negative element count")
                       (<= depth 0)
                         (fatal
                           (fmt "RESP array nests deeper than %d levels"
