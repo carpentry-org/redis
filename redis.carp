@@ -54,13 +54,35 @@ malformed.")
   (private bad-header)
   ; a header missing its CRLF may still be completed; one that has it never will
   (defn bad-header [s pos slen msg]
-    (if (= (find-cr-after s pos slen) -1) (needs-more msg) (fatal msg)))
+    (let [idx (find-cr-after s pos slen)]
+      (if (or (= idx -1) (>= (Int.inc idx) slen)) (needs-more msg) (fatal msg))))
+
+  (hidden crlf-at?)
+  (private crlf-at?)
+  (defn crlf-at? [s idx slen]
+    (and (< (Int.inc idx) slen) (= (String.char-at s (Int.inc idx)) \newline)))
+
+  (hidden after-crlf)
+  (private after-crlf)
+  ; offset just past the CRLF whose \r sits at `idx`
+  (defn after-crlf [s idx slen msg]
+    (cond
+      (crlf-at? s idx slen) (Success (+ idx 2))
+      (>= (Int.inc idx) slen) (needs-more msg)
+      (fatal msg)))
+
+  (hidden value-at-crlf)
+  (private value-at-crlf)
+  (defn value-at-crlf [s idx slen msg v]
+    (match (after-crlf s idx slen msg)
+      (Result.Error e) (Error e)
+      (Result.Success next) (Success (Pair.init v next))))
 
   (hidden parse-bulk-header)
   (private parse-bulk-header)
   (defn parse-bulk-header [s pos slen]
     (let [idx (find-cr-after s (+ pos 1) slen)]
-      (if (= idx -1)
+      (if (or (= idx -1) (not (crlf-at? s idx slen)))
         (Maybe.Nothing)
         (match (Int.from-string &(String.byte-slice s (+ pos 1) idx))
           (Maybe.Nothing) (Maybe.Nothing)
@@ -83,19 +105,21 @@ malformed.")
                   idx (find-cr-after s pos slen)]
               (if (= idx -1)
                 (bad-header s pos slen @"Malformed simple string")
-                (Success
-                  (Pair.init
-                    (Str (String.byte-slice s rest-start idx))
-                    (+ idx 2)))))
+                (value-at-crlf s
+                               idx
+                               slen
+                               @"Malformed simple string"
+                               (Str (String.byte-slice s rest-start idx)))))
             \-
             (let [rest-start (+ pos 1)
                   idx (find-cr-after s pos slen)]
               (if (= idx -1)
                 (bad-header s pos slen @"Malformed error string")
-                (Success
-                  (Pair.init
-                    (Err (String.byte-slice s rest-start idx))
-                    (+ idx 2)))))
+                (value-at-crlf s
+                               idx
+                               slen
+                               @"Malformed error string"
+                               (Err (String.byte-slice s rest-start idx)))))
             \:
             ; search from rest-start, not pos: unlike +/-, an empty integer
             ; (":\r\n") has no round-trip to preserve and must stay malformed —
@@ -106,7 +130,8 @@ malformed.")
                 (bad-header s pos slen @"Malformed integer")
                 (match (Int.from-string &(String.byte-slice s rest-start idx))
                   (Maybe.Nothing) (fatal @"Could not parse integer in result.")
-                  (Maybe.Just n) (Success (Pair.init (Integer n) (+ idx 2))))))
+                  (Maybe.Just n)
+                    (value-at-crlf s idx slen @"Malformed integer" (Integer n)))))
             \$
             (match (parse-bulk-header s pos slen)
               (Maybe.Nothing) (bad-header s pos slen @"Malformed bulk string")
@@ -138,28 +163,33 @@ malformed.")
                   (Maybe.Just len)
                     (cond
                       (= len -1)
-                      (Success (Pair.init (Null) (+ idx 2)))
+                        (value-at-crlf s idx slen @"Malformed array" (Null))
                       (<= depth 0)
-                      (fatal
-                        (fmt "RESP array nests deeper than %d levels" max-depth))
+                        (fatal
+                          (fmt "RESP array nests deeper than %d levels"
+                               max-depth))
                       (= len 0)
-                      (Success (Pair.init (Arr []) (+ idx 2)))
-                      ; build incrementally so the error path frees only decoded
-                      ; boxes, never uninitialized slots
-                      (let-do [cur (+ idx 2)
-                               a []
-                               err (the (Maybe (Pair String Bool))
-                                        (Maybe.Nothing))]
-                        (for [i 0 len]
-                          (match (decode-one-at s cur slen (Int.dec depth))
-                            (Result.Error e) (do (set! err (Just e)) (break))
-                            (Result.Success p)
-                              (do
-                                (Array.push-back! &a (Box.init @(Pair.a &p)))
-                                (set! cur @(Pair.b &p)))))
-                        (match err
-                          (Maybe.Nothing) (Success (Pair.init (Arr a) cur))
-                          (Maybe.Just e) (Error e)))))))
+                        (value-at-crlf s idx slen @"Malformed array" (Arr []))
+                      (match (after-crlf s idx slen @"Malformed array")
+                        (Result.Error e)
+                        (Error e)
+                        (Result.Success start)
+                        ; build incrementally so the error path frees only
+                        ; decoded boxes, never uninitialized slots
+                        (let-do [cur start
+                                 a []
+                                 err (the (Maybe (Pair String Bool))
+                                          (Maybe.Nothing))]
+                          (for [i 0 len]
+                            (match (decode-one-at s cur slen (Int.dec depth))
+                              (Result.Error e) (do (set! err (Just e)) (break))
+                              (Result.Success p)
+                                (do
+                                  (Array.push-back! &a (Box.init @(Pair.a &p)))
+                                  (set! cur @(Pair.b &p)))))
+                          (match err
+                            (Maybe.Nothing) (Success (Pair.init (Arr a) cur))
+                            (Maybe.Just e) (Error e))))))))
             (fatal
               (fmt "Malformed RESP data: got %s"
                    &(String.byte-slice s pos (+ pos 1)))))))

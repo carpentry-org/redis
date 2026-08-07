@@ -77,6 +77,40 @@ length-aware fill for a split bulk. Returns the decoded values and the leftover.
               (set! ci (Int.inc ci)))))))
     (Pair.init results acc)))
 
+(doc prefix-counts
+  "how many values every prefix of `s` decodes to, one digit per prefix length
+from 0 to `(String.length s)`.")
+(defn prefix-counts [s]
+  (let-do [out @""
+           total (String.length s)]
+    (for [n 0 (Int.inc total)]
+      (let [p (RESP.decode-available &(String.byte-slice s 0 n) 0 9)]
+        (set! out (String.append &out &(Int.str (Array.length (Pair.a &p)))))))
+    out))
+
+(doc prefixes-in-bounds?
+  "true when no prefix of any string in `ss` resumes past its own end; a
+regression shows up as a heap abort rather than a failed assertion.")
+(defn prefixes-in-bounds? [ss]
+  (let-do [ok true]
+    (for [i 0 (Array.length ss)]
+      (let-do [s (Array.unsafe-nth ss i)
+               total (String.length s)]
+        (for [n 0 (Int.inc total)]
+          (let-do [prefix (String.byte-slice s 0 n)
+                   p (RESP.decode-available &prefix 0 9)]
+            (when (> @(Pair.b &p) n) (set! ok false))
+            (match (RESP.decode-first &prefix)
+              (Result.Success rest)
+                (when (> (String.length (Pair.b &rest)) n) (set! ok false))
+              (Result.Error _) ())))))
+    ok))
+
+(doc needs-more?
+  "true when `s` is an incomplete value rather than an unsalvageable one.")
+(defn needs-more? [s]
+  (and (Result.error? &(RESP.from-string s)) (not (fatal-at? s 0))))
+
 (doc chunk-by
   "splits `s` into consecutive byte-slices of at most `size` bytes, so a large
 frame can be fed to `feed-n` the way many small socket reads deliver it.")
@@ -1270,4 +1304,97 @@ shows up as leftovers a later command would misread.")
 
   (assert-true test
     (Result.error? &(TransactionResult.decode-replies &(the (Array RESP) []) -2))
-    "a negative command count is an error, not an out-of-bounds read"))
+    "a negative command count is an error, not an out-of-bounds read")
+
+  ; --- a read that ends between a value's CR and its LF ---
+  (assert-true test
+    (prefixes-in-bounds?
+      &[@"+OK\r\n"
+        @"-ERR bad\r\n"
+        @":1234\r\n"
+        @"$5\r\nhello\r\n"
+        @"$-1\r\n"
+        @"*0\r\n"
+        @"*-1\r\n"
+        @"*1\r\n*2\r\n:1\r\n+OK\r\n"
+        @"+OK\r\n:1\r\n"])
+    "no prefix of any reply shape resumes past the bytes it was given")
+
+  (assert-equal test
+    "000001"
+    &(prefix-counts "+OK\r\n")
+    "only the whole simple string decodes")
+
+  (assert-equal test
+    "00000000001"
+    &(prefix-counts "-ERR bad\r\n")
+    "only the whole error decodes")
+
+  (assert-equal test
+    "00000001"
+    &(prefix-counts ":1234\r\n")
+    "only the whole integer decodes")
+
+  (assert-equal test
+    "000000000001"
+    &(prefix-counts "$5\r\nhello\r\n")
+    "only the whole bulk string decodes")
+
+  (assert-equal test
+    "000001"
+    &(prefix-counts "$-1\r\n")
+    "only the whole null bulk string decodes")
+
+  (assert-equal test
+    "00001"
+    &(prefix-counts "*0\r\n")
+    "only the whole empty array decodes")
+
+  (assert-equal test
+    "000001"
+    &(prefix-counts "*-1\r\n")
+    "only the whole null array decodes")
+
+  (assert-equal test
+    "000000000000000001"
+    &(prefix-counts "*1\r\n*2\r\n:1\r\n+OK\r\n")
+    "only the whole nested array decodes")
+
+  (assert-equal test
+    "0000011112"
+    &(prefix-counts "+OK\r\n:1\r\n")
+    "a pipelined pair decodes one value until the second is whole too")
+
+  (assert-true test
+    (Array.all? &(fn [s] (needs-more? s))
+                &[@"+OK\r"
+                  @"-ERR\r"
+                  @":5\r"
+                  @"$-1\r"
+                  @"$3\r"
+                  @"*0\r"
+                  @"*-1\r"
+                  @"*1\r"])
+    "a header cut after its CR is incomplete, so a streaming read keeps waiting")
+
+  (assert-true test
+    (Array.all? &(fn [s] (fatal-at? s 0))
+                &[@"+OK\rX"
+                  @"-ERR\rX"
+                  @":5\rX"
+                  @"$-1\rX"
+                  @"$3\rX"
+                  @"*0\rX"
+                  @"*-1\rX"
+                  @"*1\rX"])
+    "a CR followed by anything but LF can never complete, so it fails at once")
+
+  (assert-true test
+    (let-do [p (feed-n &(chunk-by "+OK\r\n" 4) 1)]
+      (and (= (Array.length (Pair.a &p)) 1) (String.empty? (Pair.b &p))))
+    "buffered read: a reply split at its CRLF reassembles")
+
+  (assert-true test
+    (let-do [p (feed-n &(chunk-by "*2\r\n$3\r\nfoo\r\n:7\r\n" 1) 1)]
+      (and (= (Array.length (Pair.a &p)) 1) (String.empty? (Pair.b &p))))
+    "buffered read: an array delivered one byte at a time reassembles"))
