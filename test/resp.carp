@@ -695,6 +695,44 @@ shows up as leftovers a later command would misread.")
     (decode-err? "$-2\r\nxx\r\n")
     "reject bulk string with negative length")
 
+  (assert-true test
+    (Array.all? &(fn [s] (fatal-at? s 0))
+                &[@"*-2\r\n"
+                  @"*-7\r\n"
+                  @"*-99999\r\n"
+                  @"*-2\r"
+                  @"*-2\r\n+OK\r\n"])
+    "an array count below -1 is fatal, not an empty array")
+
+  (assert-true test
+    (Array.all? &(fn [s] (fatal-at? s 0))
+                &[@"*99999999999\r\n"
+                  @"*4294967295\r\n"
+                  @"*2147483648\r\n"
+                  @"$99999999999\r\n"
+                  @"$4294967295\r\n"])
+    "a count no Int can hold is fatal, not saturated or wrapped into a small one")
+
+  (assert-true test
+    (Array.all? &(fn [s] (fatal-at? s 0))
+                &[@"* 5\r\n" @"*+5\r\n" @"$ 5\r\nhello\r\n" @"$+5\r\nhello\r\n"])
+    "a count padded with whitespace or a leading plus is fatal")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available "*-2\r\n+OK\r\n" 0 9)]
+      (and (= (Array.length (Pair.a &p)) 0) (= @(Pair.b &p) 0)))
+    "a buffered read stops at a bad count instead of yielding an empty array")
+
+  (assert-true test
+    (Array.all? &(fn [s] (needs-more? s))
+                &[@"*2147483647\r\n" @"$2147483647\r\nhi\r\n" @"*3\r\n:1\r\n"])
+    "a representable count whose values are still on the wire keeps waiting")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available "*0\r\n*-1\r\n*2\r\n:1\r\n:2\r\n" 0 9)]
+      (and (= (Array.length (Pair.a &p)) 3) (= @(Pair.b &p) 21)))
+    "the valid array counts still decode, pipelined, with nothing left over")
+
   (assert-equal test 32 RESP.max-depth "the documented nesting bound")
 
   (assert-true test
