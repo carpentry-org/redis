@@ -37,9 +37,10 @@
                 <div class="module-description">
                     <p>is a wrapper around the <a href="https://redis.io/topics/protocol">Redis Serialization
 Protocol</a>. You can create all types,
-stringify the built types into strings using <a href="#str"><code>str</code></a>, and decode from
-the string protocol using <a href="#from-string"><code>from-string</code></a>. Arrays are fully
-supported, including nested arrays.</p>
+stringify the built types into strings using <a href="#str"><code>str</code></a>, decode single
+values with <a href="#from-string"><code>from-string</code></a>, and decode multiple concatenated
+values with <a href="#decode-n"><code>decode-n</code></a>. Arrays are fully supported, including
+nested arrays.</p>
 <pre><code>; decoding
 (RESP.from-string &quot;+OK\r\n&quot;)       ; =&gt; (Success (Str @&quot;OK&quot;))
 (RESP.from-string &quot;:42\r\n&quot;)       ; =&gt; (Success (Integer 42))
@@ -164,6 +165,26 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     </p>
                 </div>
                 <div class="binder">
+                    <a class="anchor" href="#bulk-fill-target">
+                        <h3 id="bulk-fill-target">
+                            bulk-fill-target
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref String a), Int, Int] (Maybe Int))
+                    </p>
+                    <pre class="args">
+                        (bulk-fill-target s start slen)
+                    </pre>
+                    <p class="doc">
+                        <p>the buffer length the partial bulk string at <code>start</code> needs before it decodes, when its header has arrived but its payload has not; else <code>Nothing</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
                     <a class="anchor" href="#copy">
                         <h3 id="copy">
                             copy
@@ -180,6 +201,83 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     </span>
                     <p class="doc">
                         <p>copies a <code>RESP</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#decode-available">
+                        <h3 id="decode-available">
+                            decode-available
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref String a), Int, Int] (Pair (Array RESP) Int))
+                    </p>
+                    <pre class="args">
+                        (decode-available s start n)
+                    </pre>
+                    <p class="doc">
+                        <p>decodes up to <code>n</code> complete <code>RESP</code> values from <code>s</code>,
+starting at byte offset <code>start</code>.</p>
+<p>Returns a <code>Pair</code> of the decoded values and the byte offset just past the last
+one — where a streaming caller should resume once more bytes arrive. Decoding
+stops at the first incomplete or malformed value, so the array may hold fewer
+than <code>n</code> values and the offset then marks the start of the still-unconsumed
+tail. Unlike <a href="#decode-first"><code>decode-first</code></a> it consumes many values in a single
+left-to-right pass without re-slicing between them, which is what lets a
+buffered reader stay linear instead of quadratic.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#decode-first">
+                        <h3 id="decode-first">
+                            decode-first
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref String a)] (Result (Pair RESP String) String))
+                    </p>
+                    <pre class="args">
+                        (decode-first s)
+                    </pre>
+                    <p class="doc">
+                        <p>decodes the first complete RESP value from <code>s</code>.</p>
+<p>Returns that value paired with the remaining, still-unconsumed suffix of <code>s</code>.
+Unlike <a href="#decode-n"><code>decode-n</code></a>, it reports the leftover bytes, so a caller
+streaming from a socket can keep a partial trailing value — or a whole value
+that coalesced into the same read — buffered until it is needed. Returns an
+<code>Error</code> if <code>s</code> does not begin with a complete RESP value, either because the
+input is malformed or because a value is truncated mid-way.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#decode-n">
+                        <h3 id="decode-n">
+                            decode-n
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref String a), Int] (Array RESP))
+                    </p>
+                    <pre class="args">
+                        (decode-n s n)
+                    </pre>
+                    <p class="doc">
+                        <p>decodes up to <code>n</code> RESP values from string <code>s</code>.</p>
+<p>Returns an array of the values that could be successfully decoded. If the
+array has fewer than <code>n</code> elements, the string did not contain enough
+complete RESP data.</p>
 
                     </p>
                 </div>
@@ -204,6 +302,49 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     </p>
                 </div>
                 <div class="binder">
+                    <a class="anchor" href="#encode-command">
+                        <h3 id="encode-command">
+                            encode-command
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref String a), (Ref (Array RESP) b)] String)
+                    </p>
+                    <pre class="args">
+                        (encode-command cmd args)
+                    </pre>
+                    <p class="doc">
+                        <p>encodes command name <code>cmd</code> and its already-encoded <code>args</code> into a RESP
+multi-bulk wire string. Sub-commands in <code>cmd</code> are separated by spaces (e.g.
+<code>@&quot;CLIENT ID&quot;</code>).</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#fatal-error-at">
+                        <h3 id="fatal-error-at">
+                            fatal-error-at
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref String a), Int, Int] (Maybe String))
+                    </p>
+                    <pre class="args">
+                        (fatal-error-at s start slen)
+                    </pre>
+                    <p class="doc">
+                        <p>the decoder error for the value at <code>start</code> in <code>s</code>, if no amount of further
+input could ever make it decode; else <code>Nothing</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
                     <a class="anchor" href="#from-string">
                         <h3 id="from-string">
                             from-string
@@ -220,6 +361,7 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     </pre>
                     <p class="doc">
                         <p>converts a RESP string into a <code>RESP</code> data structure.</p>
+<p>Arrays nested deeper than <a href="#max-depth"><code>max-depth</code></a> are rejected as malformed.</p>
 
                     </p>
                 </div>
@@ -240,6 +382,27 @@ the interface <code>to-redis</code>, the signature of which is <code>(Fn [a] RES
                     </span>
                     <p class="doc">
                         <p>Gets the tag from a <code>RESP</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#max-depth">
+                        <h3 id="max-depth">
+                            max-depth
+                        </h3>
+                    </a>
+                    <div class="description">
+                        def
+                    </div>
+                    <p class="sig">
+                        Int
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>the deepest array nesting the decoders accept; deeper input is rejected as
+malformed.</p>
 
                     </p>
                 </div>

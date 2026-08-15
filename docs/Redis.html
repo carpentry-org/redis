@@ -39,6 +39,10 @@
 connection using <a href="#open"><code>open</code></a> or <a href="#open-on"><code>open-on</code></a>, reading from and
 sending to the connection (using <a href="#read"><code>read</code></a> and <a href="#send"><code>send</code></a>,
 respectively), and contains thin wrappers around all Redis commands through 7.2.</p>
+<p>Commands can also be batched using <a href="#pipeline-exec"><code>pipeline-exec</code></a> or the
+<a href="#with-pipeline"><code>with-pipeline</code></a> macro to reduce round-trip latency, or run
+atomically using <a href="#transaction-exec"><code>transaction-exec</code></a> and the
+<a href="#with-transaction"><code>with-transaction</code></a> macro.</p>
 <pre><code>(match (Redis.open &quot;127.0.0.1&quot;)
   (Result.Success r)
     (do
@@ -551,6 +555,26 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                     <p class="doc">
                         <p>is a wrapper around the <code>brpoplpush</code> Redis command.</p>
 <p>It takes the same arguments as the <a href="https://redis.io/commands/brpoplpush">Redis command</a>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#buf">
+                        <h3 id="buf">
+                            buf
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref Redis a)] (Ref String a))
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>gets the <code>buf</code> property of a <code>Redis</code>.</p>
 
                     </p>
                 </div>
@@ -3103,7 +3127,7 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                         instantiate
                     </div>
                     <p class="sig">
-                        (Fn [TcpStream] Redis)
+                        (Fn [TcpStream, String] Redis)
                     </p>
                     <span>
                         
@@ -3362,6 +3386,30 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                     <p class="doc">
                         <p>is a wrapper around the <code>linsert</code> Redis command.</p>
 <p>It takes the same arguments as the <a href="https://redis.io/commands/linsert">Redis command</a>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#listen">
+                        <h3 id="listen">
+                            listen
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref Redis a), (Ref (Fn [(Ref PubSubMessage b)] () c) d)] (Result () String))
+                    </p>
+                    <pre class="args">
+                        (listen r callback)
+                    </pre>
+                    <p class="doc">
+                        <p>repeatedly reads pub/sub replies, passing each decoded
+<code>PubSubMessage</code> to <code>callback</code> until an error occurs.</p>
+<p>Loops on <a href="#next-message"><code>next-message</code></a>, invoking <code>callback</code> by reference for
+every message, until a read or decode error is returned — e.g. the connection
+is closed. That terminating error is returned to the caller.</p>
 
                     </p>
                 </div>
@@ -3975,6 +4023,29 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                     </p>
                 </div>
                 <div class="binder">
+                    <a class="anchor" href="#next-message">
+                        <h3 id="next-message">
+                            next-message
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref Redis a)] (Result PubSubMessage String))
+                    </p>
+                    <pre class="args">
+                        (next-message r)
+                    </pre>
+                    <p class="doc">
+                        <p>reads the next pushed pub/sub reply and decodes it.</p>
+<p>Blocks until one complete <code>RESP</code> value has been received (see <a href="#read"><code>read</code></a>),
+then pipes it through <a href="#decode-message"><code>PubSubMessage.decode-message</code></a>.
+Propagates read errors and decoding errors as an <code>Error</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
                     <a class="anchor" href="#object">
                         <h3 id="object">
                             object
@@ -4205,6 +4276,28 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                     </p>
                 </div>
                 <div class="binder">
+                    <a class="anchor" href="#pipeline-exec">
+                        <h3 id="pipeline-exec">
+                            pipeline-exec
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref Redis a), (Ref RedisPipeline b)] (Result (Array RESP) String))
+                    </p>
+                    <pre class="args">
+                        (pipeline-exec r p)
+                    </pre>
+                    <p class="doc">
+                        <p>sends all commands in the pipeline and reads all responses.</p>
+<p>Returns <code>(Result (Array RESP) String)</code> with one RESP value per command,
+in the order they were added.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
                     <a class="anchor" href="#prn">
                         <h3 id="prn">
                             prn
@@ -4429,7 +4522,11 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                         (read r)
                     </pre>
                     <p class="doc">
-                        <p>reads a <code>RESP</code> object from Redis.</p>
+                        <p>reads a single <code>RESP</code> object from Redis.</p>
+<p>Accumulates data across multiple socket reads until a complete RESP value has
+been received. Any extra bytes read past that value — for example a pushed
+pub/sub reply that coalesced into the same packet — are retained on the
+connection for the next <a href="#read"><code>read</code></a>, so no reply is ever dropped.</p>
 
                     </p>
                 </div>
@@ -4947,13 +5044,14 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                         defn
                     </div>
                     <p class="sig">
-                        (Fn [(Ref Redis a), String, (Ref (Array RESP) b)] ())
+                        (Fn [(Ref Redis a), String, (Ref (Array RESP) b)] (Result () String))
                     </p>
                     <pre class="args">
                         (send r cmd args)
                     </pre>
                     <p class="doc">
                         <p>sends the command <code>cmd</code> with the arguments <code>args</code> to Redis.</p>
+<p>Returns <code>(Result () String)</code>, propagating any socket errors.</p>
 
                     </p>
                 </div>
@@ -4975,6 +5073,46 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                     <p class="doc">
                         <p>is a wrapper around the <code>set</code> Redis command.</p>
 <p>It takes the same arguments as the <a href="https://redis.io/commands/set">Redis command</a>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#set-buf">
+                        <h3 id="set-buf">
+                            set-buf
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [Redis, String] Redis)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>sets the <code>buf</code> property of a <code>Redis</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#set-buf!">
+                        <h3 id="set-buf!">
+                            set-buf!
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref Redis a), String] ())
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>sets the <code>buf</code> property of a <code>Redis</code> in place.</p>
 
                     </p>
                 </div>
@@ -5710,6 +5848,34 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                     </p>
                 </div>
                 <div class="binder">
+                    <a class="anchor" href="#transaction-exec">
+                        <h3 id="transaction-exec">
+                            transaction-exec
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref Redis a), (Ref RedisPipeline b)] (Result TransactionResult String))
+                    </p>
+                    <pre class="args">
+                        (transaction-exec r p)
+                    </pre>
+                    <p class="doc">
+                        <p>runs all commands in the pipeline as a single transaction.</p>
+<p>Sends <code>MULTI</code>, every queued command and <code>EXEC</code> in one write, then reads all
+<code>n + 2</code> replies before interpreting them with
+<a href="#decode-replies"><code>decode-replies</code></a> — even on the failure paths, so the
+connection is never left holding replies a later command would mistake for its
+own.</p>
+<p>Returns <code>(Result TransactionResult String)</code>. Unlike
+<a href="#pipeline-exec"><code>pipeline-exec</code></a> an empty batch is still sent, because an empty
+transaction clears the keys the connection is watching.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
                     <a class="anchor" href="#ttl">
                         <h3 id="ttl">
                             ttl
@@ -5811,6 +5977,26 @@ respectively), and contains thin wrappers around all Redis commands through 7.2.
                     <p class="doc">
                         <p>is a wrapper around the <code>unwatch</code> Redis command.</p>
 <p>It takes the same arguments as the <a href="https://redis.io/commands/unwatch">Redis command</a>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#update-buf">
+                        <h3 id="update-buf">
+                            update-buf
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [Redis, (Ref (Fn [String] String a) b)] Redis)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>updates the <code>buf</code> property of a <code>Redis</code> using a function <code>f</code>.</p>
 
                     </p>
                 </div>
