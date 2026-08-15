@@ -11,7 +11,7 @@
 ## Installation
 
 ```
-(load \"https://git.veitheller.de/carpentry/redis.git@0.2.0\")
+(load \"https://git.veitheller.de/carpentry/redis.git@0.2.2\")
 ```
 
 ## Example
