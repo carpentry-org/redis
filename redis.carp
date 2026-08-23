@@ -561,8 +561,9 @@ an unknown kind, a wrong element count, or a field of the wrong type.")
   (doc next-message "reads the next pushed pub/sub reply and decodes it.
 
 Blocks until one complete `RESP` value has been received (see [`read`](#read)),
-then pipes it through [`PubSubMessage.decode-message`](#decode-message).
-Propagates read errors and decoding errors as an `Error`.")
+then pipes it through
+[`PubSubMessage.decode-message`](PubSubMessage.html#decode-message). Propagates
+read errors and decoding errors as an `Error`.")
   (defn next-message [r]
     (match (read r)
       (Result.Error e) (Result.Error e)
@@ -951,8 +952,8 @@ It takes the same arguments as the [Redis command](https://redis.io/commands/"
   (doc add "adds a command to the pipeline.
 
 The command name must use spaces to separate sub-commands (e.g.
-`@\"CLIENT ID\"`, not `@\"client-id\"`). The [`with-pipeline`](#with-pipeline)
-macro converts hyphens to spaces automatically, but `add` does not.")
+`@\"CLIENT ID\"`, not `@\"client-id\"`). The `with-pipeline` macro converts
+hyphens to spaces automatically, but `add` does not.")
   (defn add [p cmd args]
     (let-do [msg (RESP.encode-command &cmd args)]
       (StringBuf.append-str (buf p) &msg)
@@ -1018,6 +1019,12 @@ Returns `(Result (Array RESP) String)`.
 (deftype QueueError [index Int
                      message String])
 
+(defmodule QueueError
+  (doc index "the refused command’s position in the batch, counting from zero
+in the order the commands were added.")
+  (doc message "the server’s error text for the refused command, without RESP
+framing — e.g. `ERR unknown command 'FOO'`."))
+
 (deftype TransactionResult
   (Executed [(Array RESP)])
   (Aborted [])
@@ -1043,7 +1050,8 @@ Returns `(Result (Array RESP) String)`.
 
 `replies` must hold `MULTI`’s reply, one queue acknowledgement per command and
 `EXEC`’s reply, in that order — see
-[`transaction-exec`](#transaction-exec), which is what normally produces them.
+[`transaction-exec`](Redis.html#transaction-exec), which is what normally
+produces them.
 
 An `EXEC` array becomes `Executed`, carrying one reply per command; those
 replies are passed through untouched, so a command that failed at runtime (e.g.
@@ -1090,9 +1098,9 @@ not have the shape the protocol guarantees — a wrong number of replies, or an
 
 Sends `MULTI`, every queued command and `EXEC` in one write, then reads all
 `n + 2` replies before interpreting them with
-[`decode-replies`](#decode-replies) — even on the failure paths, so the
-connection is never left holding replies a later command would mistake for its
-own.
+[`decode-replies`](TransactionResult.html#decode-replies) — even on the
+failure paths, so the connection is never left holding replies a later command
+would mistake for its own.
 
 Returns `(Result TransactionResult String)`. Unlike
 [`pipeline-exec`](#pipeline-exec) an empty batch is still sent, because an empty
@@ -1132,9 +1140,8 @@ sending to the connection (using [`read`](#read) and [`send`](#send),
 respectively), and contains thin wrappers around all Redis commands through 7.2.
 
 Commands can also be batched using [`pipeline-exec`](#pipeline-exec) or the
-[`with-pipeline`](#with-pipeline) macro to reduce round-trip latency, or run
-atomically using [`transaction-exec`](#transaction-exec) and the
-[`with-transaction`](#with-transaction) macro.
+`with-pipeline` macro to reduce round-trip latency, or run atomically using
+[`transaction-exec`](#transaction-exec) and the `with-transaction` macro.
 
 ```
 (match (Redis.open \"127.0.0.1\")
@@ -1177,10 +1184,10 @@ nested arrays.
 If you want your types to be supported when encoding, you’ll have to implement
 the interface `to-redis`, the signature of which is `(Fn [a] RESP))`.")
 (doc PubSubMessage "is the decoded form of a reply pushed to a subscribed
-connection. After [`subscribe`](#subscribe) or [`psubscribe`](#psubscribe),
-read the stream of pushed replies with [`next-message`](#next-message), which
-turns each raw `RESP` value into one of these variants using
-[`decode-message`](#decode-message).
+connection. After [`subscribe`](Redis.html#subscribe) or
+[`psubscribe`](Redis.html#psubscribe), read the stream of pushed replies with
+[`next-message`](Redis.html#next-message), which turns each raw `RESP` value
+into one of these variants using [`decode-message`](#decode-message).
 
 ```
 (match (Redis.subscribe &r @\"news\")
@@ -1196,13 +1203,24 @@ turns each raw `RESP` value into one of these variants using
       (Result.Error e) (IO.errorln &e))
   (Result.Error e) (IO.errorln &e))
 ```")
+(doc RedisPipeline "is a batch of commands accumulated in memory and sent in a
+single write, either as a plain pipeline with
+[`pipeline-exec`](Redis.html#pipeline-exec) or as a transaction with
+[`transaction-exec`](Redis.html#transaction-exec). The `with-pipeline` and
+`with-transaction` macros build and run one for you; `begin` and `add` are there
+for when the set of commands is not known until runtime.")
+(doc QueueError "is one command the server refused to queue during a
+`MULTI`/`EXEC` transaction. The refusal happens before `EXEC`, and it costs the
+whole batch: none of the commands run.
+[`QueueFailed`](TransactionResult.html#QueueFailed) carries one of these per
+refused command, in batch order.")
 (doc TransactionResult "is the outcome of a `MULTI`/`EXEC` transaction run with
-[`transaction-exec`](#transaction-exec) or the
-[`with-transaction`](#with-transaction) macro. The three variants are the three
-things Redis can do with a transaction, and they need telling apart: `Executed`
-means it ran and carries one reply per command, `Aborted` means a `WATCH`ed key
-changed underneath it, and `QueueFailed` means the server refused one or more
-commands before `EXEC` and ran none of them.
+[`transaction-exec`](Redis.html#transaction-exec) or the `with-transaction`
+macro. The three variants are the three things Redis can do with a transaction,
+and they need telling apart: `Executed` means it ran and carries one reply per
+command, `Aborted` means a `WATCH`ed key changed underneath it, and
+`QueueFailed` means the server refused one or more commands before `EXEC` and
+ran none of them.
 
 A command that failed at runtime — `WRONGTYPE`, say — does not abort a
 transaction: Redis runs the rest and reports the failure in place, so it arrives

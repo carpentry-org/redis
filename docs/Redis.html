@@ -27,6 +27,26 @@
                                 Redis
                             </a>
                         </li>
+                        <li>
+                            <a href="PubSubMessage.html">
+                                PubSubMessage
+                            </a>
+                        </li>
+                        <li>
+                            <a href="RedisPipeline.html">
+                                RedisPipeline
+                            </a>
+                        </li>
+                        <li>
+                            <a href="TransactionResult.html">
+                                TransactionResult
+                            </a>
+                        </li>
+                        <li>
+                            <a href="QueueError.html">
+                                QueueError
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -40,9 +60,8 @@ connection using <a href="#open"><code>open</code></a> or <a href="#open-on"><co
 sending to the connection (using <a href="#read"><code>read</code></a> and <a href="#send"><code>send</code></a>,
 respectively), and contains thin wrappers around all Redis commands through 7.2.</p>
 <p>Commands can also be batched using <a href="#pipeline-exec"><code>pipeline-exec</code></a> or the
-<a href="#with-pipeline"><code>with-pipeline</code></a> macro to reduce round-trip latency, or run
-atomically using <a href="#transaction-exec"><code>transaction-exec</code></a> and the
-<a href="#with-transaction"><code>with-transaction</code></a> macro.</p>
+<code>with-pipeline</code> macro to reduce round-trip latency, or run atomically using
+<a href="#transaction-exec"><code>transaction-exec</code></a> and the <code>with-transaction</code> macro.</p>
 <pre><code>(match (Redis.open &quot;127.0.0.1&quot;)
   (Result.Success r)
     (do
@@ -4040,8 +4059,9 @@ is closed. That terminating error is returned to the caller.</p>
                     <p class="doc">
                         <p>reads the next pushed pub/sub reply and decodes it.</p>
 <p>Blocks until one complete <code>RESP</code> value has been received (see <a href="#read"><code>read</code></a>),
-then pipes it through <a href="#decode-message"><code>PubSubMessage.decode-message</code></a>.
-Propagates read errors and decoding errors as an <code>Error</code>.</p>
+then pipes it through
+<a href="PubSubMessage.html#decode-message"><code>PubSubMessage.decode-message</code></a>. Propagates
+read errors and decoding errors as an <code>Error</code>.</p>
 
                     </p>
                 </div>
@@ -5866,9 +5886,9 @@ connection for the next <a href="#read"><code>read</code></a>, so no reply is ev
                         <p>runs all commands in the pipeline as a single transaction.</p>
 <p>Sends <code>MULTI</code>, every queued command and <code>EXEC</code> in one write, then reads all
 <code>n + 2</code> replies before interpreting them with
-<a href="#decode-replies"><code>decode-replies</code></a> — even on the failure paths, so the
-connection is never left holding replies a later command would mistake for its
-own.</p>
+<a href="TransactionResult.html#decode-replies"><code>decode-replies</code></a> — even on the
+failure paths, so the connection is never left holding replies a later command
+would mistake for its own.</p>
 <p>Returns <code>(Result TransactionResult String)</code>. Unlike
 <a href="#pipeline-exec"><code>pipeline-exec</code></a> an empty batch is still sent, because an empty
 transaction clears the keys the connection is watching.</p>

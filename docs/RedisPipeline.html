@@ -1,0 +1,393 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+        <link rel="stylesheet" href="../style.css">
+    </head>
+    <body>
+        <div class="content">
+            <div class="logo">
+                <a href="https://git.veitheller.de/carpentry/redis">
+                    <img src="">
+                </a>
+                <div class="title">
+                    redis
+                </div>
+                <div class="index">
+                    <ul>
+                        <li>
+                            <a href="RESP.html">
+                                RESP
+                            </a>
+                        </li>
+                        <li>
+                            <a href="Redis.html">
+                                Redis
+                            </a>
+                        </li>
+                        <li>
+                            <a href="PubSubMessage.html">
+                                PubSubMessage
+                            </a>
+                        </li>
+                        <li>
+                            <a href="RedisPipeline.html">
+                                RedisPipeline
+                            </a>
+                        </li>
+                        <li>
+                            <a href="TransactionResult.html">
+                                TransactionResult
+                            </a>
+                        </li>
+                        <li>
+                            <a href="QueueError.html">
+                                QueueError
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="module">
+                <h1>
+                    RedisPipeline
+                </h1>
+                <div class="module-description">
+                    <p>is a batch of commands accumulated in memory and sent in a
+single write, either as a plain pipeline with
+<a href="Redis.html#pipeline-exec"><code>pipeline-exec</code></a> or as a transaction with
+<a href="Redis.html#transaction-exec"><code>transaction-exec</code></a>. The <code>with-pipeline</code> and
+<code>with-transaction</code> macros build and run one for you; <code>begin</code> and <code>add</code> are there
+for when the set of commands is not known until runtime.</p>
+
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#add">
+                        <h3 id="add">
+                            add
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a), String, (Ref (Array RESP) b)] ())
+                    </p>
+                    <pre class="args">
+                        (add p cmd args)
+                    </pre>
+                    <p class="doc">
+                        <p>adds a command to the pipeline.</p>
+<p>The command name must use spaces to separate sub-commands (e.g.
+<code>@&quot;CLIENT ID&quot;</code>, not <code>@&quot;client-id&quot;</code>). The <code>with-pipeline</code> macro converts
+hyphens to spaces automatically, but <code>add</code> does not.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#begin">
+                        <h3 id="begin">
+                            begin
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [] RedisPipeline)
+                    </p>
+                    <pre class="args">
+                        (begin)
+                    </pre>
+                    <p class="doc">
+                        <p>creates a new empty pipeline.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#buf">
+                        <h3 id="buf">
+                            buf
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a)] (Ref StringBuf a))
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>gets the <code>buf</code> property of a <code>RedisPipeline</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#copy">
+                        <h3 id="copy">
+                            copy
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a)] RedisPipeline)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>copies a <code>RedisPipeline</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#count">
+                        <h3 id="count">
+                            count
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a)] (Ref Int a))
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>gets the <code>count</code> property of a <code>RedisPipeline</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#delete">
+                        <h3 id="delete">
+                            delete
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [RedisPipeline] ())
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>deletes a <code>RedisPipeline</code>. Should usually not be called manually.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#init">
+                        <h3 id="init">
+                            init
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [StringBuf, Int] RedisPipeline)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>creates a <code>RedisPipeline</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#prn">
+                        <h3 id="prn">
+                            prn
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a)] String)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>converts a <code>RedisPipeline</code> to a string.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#set-buf">
+                        <h3 id="set-buf">
+                            set-buf
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [RedisPipeline, StringBuf] RedisPipeline)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>sets the <code>buf</code> property of a <code>RedisPipeline</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#set-buf!">
+                        <h3 id="set-buf!">
+                            set-buf!
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a), StringBuf] ())
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>sets the <code>buf</code> property of a <code>RedisPipeline</code> in place.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#set-count">
+                        <h3 id="set-count">
+                            set-count
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [RedisPipeline, Int] RedisPipeline)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>sets the <code>count</code> property of a <code>RedisPipeline</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#set-count!">
+                        <h3 id="set-count!">
+                            set-count!
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a), Int] ())
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>sets the <code>count</code> property of a <code>RedisPipeline</code> in place.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#str">
+                        <h3 id="str">
+                            str
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a)] String)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>converts a <code>RedisPipeline</code> to a string.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#transaction-str">
+                        <h3 id="transaction-str">
+                            transaction-str
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RedisPipeline a)] String)
+                    </p>
+                    <pre class="args">
+                        (transaction-str p)
+                    </pre>
+                    <p class="doc">
+                        <p>the wire bytes that run the batch as one transaction:
+<code>MULTI</code>, every added command, then <code>EXEC</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#update-buf">
+                        <h3 id="update-buf">
+                            update-buf
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [RedisPipeline, (Ref (Fn [StringBuf] StringBuf a) b)] RedisPipeline)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>updates the <code>buf</code> property of a <code>RedisPipeline</code> using a function <code>f</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#update-count">
+                        <h3 id="update-count">
+                            update-count
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [RedisPipeline, (Ref (Fn [Int] Int a) b)] RedisPipeline)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>updates the <code>count</code> property of a <code>RedisPipeline</code> using a function <code>f</code>.</p>
+
+                    </p>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

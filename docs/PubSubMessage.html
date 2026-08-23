@@ -1,0 +1,325 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+        <link rel="stylesheet" href="../style.css">
+    </head>
+    <body>
+        <div class="content">
+            <div class="logo">
+                <a href="https://git.veitheller.de/carpentry/redis">
+                    <img src="">
+                </a>
+                <div class="title">
+                    redis
+                </div>
+                <div class="index">
+                    <ul>
+                        <li>
+                            <a href="RESP.html">
+                                RESP
+                            </a>
+                        </li>
+                        <li>
+                            <a href="Redis.html">
+                                Redis
+                            </a>
+                        </li>
+                        <li>
+                            <a href="PubSubMessage.html">
+                                PubSubMessage
+                            </a>
+                        </li>
+                        <li>
+                            <a href="RedisPipeline.html">
+                                RedisPipeline
+                            </a>
+                        </li>
+                        <li>
+                            <a href="TransactionResult.html">
+                                TransactionResult
+                            </a>
+                        </li>
+                        <li>
+                            <a href="QueueError.html">
+                                QueueError
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="module">
+                <h1>
+                    PubSubMessage
+                </h1>
+                <div class="module-description">
+                    <p>is the decoded form of a reply pushed to a subscribed
+connection. After <a href="Redis.html#subscribe"><code>subscribe</code></a> or
+<a href="Redis.html#psubscribe"><code>psubscribe</code></a>, read the stream of pushed replies with
+<a href="Redis.html#next-message"><code>next-message</code></a>, which turns each raw <code>RESP</code> value
+into one of these variants using <a href="#decode-message"><code>decode-message</code></a>.</p>
+<pre><code>(match (Redis.subscribe &amp;r @&quot;news&quot;)
+  (Result.Success _)
+    (match (Redis.next-message &amp;r)
+      (Result.Success msg)
+        (match msg
+          (PubSubMessage.Message channel payload)
+            (println* &quot;got &quot; &amp;payload &quot; on &quot; &amp;channel)
+          (PubSubMessage.Subscribe channel count)
+            (println* &quot;subscribed to &quot; &amp;channel)
+          _ (println* &quot;other pub/sub reply&quot;))
+      (Result.Error e) (IO.errorln &amp;e))
+  (Result.Error e) (IO.errorln &amp;e))
+</code></pre>
+
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#Message">
+                        <h3 id="Message">
+                            Message
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [String, String] PubSubMessage)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>creates a <code>Message</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#PMessage">
+                        <h3 id="PMessage">
+                            PMessage
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [String, String, String] PubSubMessage)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>creates a <code>PMessage</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#PSubscribe">
+                        <h3 id="PSubscribe">
+                            PSubscribe
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [String, Int] PubSubMessage)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>creates a <code>PSubscribe</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#PUnsubscribe">
+                        <h3 id="PUnsubscribe">
+                            PUnsubscribe
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [String, Int] PubSubMessage)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>creates a <code>PUnsubscribe</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#Subscribe">
+                        <h3 id="Subscribe">
+                            Subscribe
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [String, Int] PubSubMessage)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>creates a <code>Subscribe</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#Unsubscribe">
+                        <h3 id="Unsubscribe">
+                            Unsubscribe
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [String, Int] PubSubMessage)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>creates a <code>Unsubscribe</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#copy">
+                        <h3 id="copy">
+                            copy
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref PubSubMessage a)] PubSubMessage)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>copies a <code>PubSubMessage</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#decode-message">
+                        <h3 id="decode-message">
+                            decode-message
+                        </h3>
+                    </a>
+                    <div class="description">
+                        defn
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref RESP a)] (Result PubSubMessage String))
+                    </p>
+                    <pre class="args">
+                        (decode-message r)
+                    </pre>
+                    <p class="doc">
+                        <p>decodes a pushed pub/sub reply <code>r</code> into a <code>PubSubMessage</code>.</p>
+<p>The reply is expected to be a <code>RESP.Arr</code> whose first element is a bulk string
+naming the kind (<code>message</code>, <code>pmessage</code>, <code>subscribe</code>, <code>unsubscribe</code>,
+<code>psubscribe</code> or <code>punsubscribe</code>). Returns an <code>Error</code> for any other RESP shape,
+an unknown kind, a wrong element count, or a field of the wrong type.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#delete">
+                        <h3 id="delete">
+                            delete
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [PubSubMessage] ())
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>deletes a <code>PubSubMessage</code>. This should usually not be called manually.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#get-tag">
+                        <h3 id="get-tag">
+                            get-tag
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref PubSubMessage a)] Int)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>Gets the tag from a <code>PubSubMessage</code>.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#prn">
+                        <h3 id="prn">
+                            prn
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref PubSubMessage a)] String)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>converts a <code>PubSubMessage</code> to a string.</p>
+
+                    </p>
+                </div>
+                <div class="binder">
+                    <a class="anchor" href="#str">
+                        <h3 id="str">
+                            str
+                        </h3>
+                    </a>
+                    <div class="description">
+                        instantiate
+                    </div>
+                    <p class="sig">
+                        (Fn [(Ref PubSubMessage a)] String)
+                    </p>
+                    <span>
+                        
+                    </span>
+                    <p class="doc">
+                        <p>converts a <code>PubSubMessage</code> to a string.</p>
+
+                    </p>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
