@@ -55,7 +55,13 @@
                     RedisPipeline
                 </h1>
                 <div class="module-description">
-                    
+                    <p>is a batch of commands accumulated in memory and sent in a
+single write, either as a plain pipeline with
+<a href="Redis.html#pipeline-exec"><code>pipeline-exec</code></a> or as a transaction with
+<a href="Redis.html#transaction-exec"><code>transaction-exec</code></a>. The <code>with-pipeline</code> and
+<code>with-transaction</code> macros build and run one for you; <code>begin</code> and <code>add</code> are there
+for when the set of commands is not known until runtime.</p>
+
                 </div>
                 <div class="binder">
                     <a class="anchor" href="#add">

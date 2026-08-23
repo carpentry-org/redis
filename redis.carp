@@ -1019,6 +1019,12 @@ Returns `(Result (Array RESP) String)`.
 (deftype QueueError [index Int
                      message String])
 
+(defmodule QueueError
+  (doc index "the refused command’s position in the batch, counting from zero
+in the order the commands were added.")
+  (doc message "the server’s error text for the refused command, without RESP
+framing — e.g. `ERR unknown command 'FOO'`."))
+
 (deftype TransactionResult
   (Executed [(Array RESP)])
   (Aborted [])
@@ -1197,6 +1203,17 @@ into one of these variants using [`decode-message`](#decode-message).
       (Result.Error e) (IO.errorln &e))
   (Result.Error e) (IO.errorln &e))
 ```")
+(doc RedisPipeline "is a batch of commands accumulated in memory and sent in a
+single write, either as a plain pipeline with
+[`pipeline-exec`](Redis.html#pipeline-exec) or as a transaction with
+[`transaction-exec`](Redis.html#transaction-exec). The `with-pipeline` and
+`with-transaction` macros build and run one for you; `begin` and `add` are there
+for when the set of commands is not known until runtime.")
+(doc QueueError "is one command the server refused to queue during a
+`MULTI`/`EXEC` transaction. The refusal happens before `EXEC`, and it costs the
+whole batch: none of the commands run.
+[`QueueFailed`](TransactionResult.html#QueueFailed) carries one of these per
+refused command, in batch order.")
 (doc TransactionResult "is the outcome of a `MULTI`/`EXEC` transaction run with
 [`transaction-exec`](Redis.html#transaction-exec) or the `with-transaction`
 macro. The three variants are the three things Redis can do with a transaction,

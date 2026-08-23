@@ -55,7 +55,12 @@
                     QueueError
                 </h1>
                 <div class="module-description">
-                    
+                    <p>is one command the server refused to queue during a
+<code>MULTI</code>/<code>EXEC</code> transaction. The refusal happens before <code>EXEC</code>, and it costs the
+whole batch: none of the commands run.
+<a href="TransactionResult.html#QueueFailed"><code>QueueFailed</code></a> carries one of these per
+refused command, in batch order.</p>
+
                 </div>
                 <div class="binder">
                     <a class="anchor" href="#copy">
@@ -113,7 +118,8 @@
                         
                     </span>
                     <p class="doc">
-                        <p>gets the <code>index</code> property of a <code>QueueError</code>.</p>
+                        <p>the refused command’s position in the batch, counting from zero
+in the order the commands were added.</p>
 
                     </p>
                 </div>
@@ -153,7 +159,8 @@
                         
                     </span>
                     <p class="doc">
-                        <p>gets the <code>message</code> property of a <code>QueueError</code>.</p>
+                        <p>the server’s error text for the refused command, without RESP
+framing — e.g. <code>ERR unknown command 'FOO'</code>.</p>
 
                     </p>
                 </div>
