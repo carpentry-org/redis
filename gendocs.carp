@@ -36,5 +36,5 @@
 ```
 ")
 
-(save-docs RESP Redis)
+(save-docs RESP Redis PubSubMessage RedisPipeline TransactionResult QueueError)
 (quit)
