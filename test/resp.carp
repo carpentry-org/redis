@@ -52,30 +52,70 @@
 so the buffered read logic is testable without a server. Mirrors `read-n`'s
 length-aware fill for a split bulk. Returns the decoded values and the leftover.")
 (defn feed-n [chunks n]
-  (let-do [acc @""
+  (let-do [acc (the (Array Byte) [])
            results (the (Array RESP) [])
            ci 0
            reading true]
     (while-do (and reading (< (Array.length &results) n))
-      (let-do [p (RESP.decode-available &acc 0 (- n (Array.length &results)))]
+      (let-do [p (RESP.decode-available-bytes &acc
+                                              0
+                                              (- n (Array.length &results)))]
         (for [i 0 (Array.length (Pair.a &p))]
           (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
-        (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
+        (when (> @(Pair.b &p) 0) (set! acc (Array.suffix &acc @(Pair.b &p)))))
       (when (< (Array.length &results) n)
-        (match (RESP.fatal-error-at &acc 0 (String.length &acc))
+        (match (RESP.fatal-error-at-bytes &acc 0)
           (Maybe.Just _) (set! reading false)
           (Maybe.Nothing) ()))
       (when (and reading (< (Array.length &results) n))
         (if (>= ci (Array.length chunks))
           (set! reading false)
-          (let [target (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
+          (let [target (match (RESP.bulk-fill-target-bytes &acc 0)
                   (Maybe.Just t) t
-                  (Maybe.Nothing) (Int.inc (String.length &acc)))]
+                  (Maybe.Nothing) (Int.inc (Array.length &acc)))]
             (while-do (and (< ci (Array.length chunks))
-                           (< (String.length &acc) target))
-              (set! acc (String.concat &[acc @(Array.unsafe-nth chunks ci)]))
+                           (< (Array.length &acc) target))
+              (set! acc
+                    (Array.concat
+                      &[acc (String.to-bytes (Array.unsafe-nth chunks ci))]))
               (set! ci (Int.inc ci)))))))
-    (Pair.init results acc)))
+    (Pair.init results (String.from-bytes &acc))))
+
+(doc nul-bytes "the bytes of `s` with every `~` turned into a NUL.")
+(defn nul-bytes [s]
+  (Array.endo-map &(fn [b] (if (= b 126b) 0b b)) (String.to-bytes s)))
+
+(defn show-reply [res]
+  (match res
+    (Result.Success v) (str &v)
+    (Result.Error e) (String.append "ERR " &e)))
+
+(doc serve-reads
+  "the first `n` `Redis.read` replies to `wire` served from a local listener,
+each re-encoded, or `ERR` and the error.")
+(defn serve-reads [wire n]
+  (let-do [out (the (Array String) [])]
+    (match (TcpListener.bind "127.0.0.1" 0)
+      (Result.Error e) (Array.push-back! &out e)
+      (Result.Success l)
+        (do
+          (match (Redis.open-on "127.0.0.1" (TcpListener.local-port &l))
+            (Result.Error e) (Array.push-back! &out e)
+            (Result.Success r)
+              (do
+                (match (TcpListener.accept &l)
+                  (Result.Error e) (Array.push-back! &out e)
+                  (Result.Success srv)
+                    (do
+                      (ignore (TcpStream.send-bytes &srv wire))
+                      (TcpStream.shutdown-write &srv)
+                      (TcpStream.set-read-timeout (Redis.sock &r) 5)
+                      (for [i 0 n]
+                        (Array.push-back! &out (show-reply (Redis.read &r))))
+                      (TcpStream.close srv)))
+                (Redis.close r)))
+          (TcpListener.close l)))
+    out))
 
 (doc prefix-counts
   "how many values every prefix of `s` decodes to, one digit per prefix length
@@ -841,6 +881,48 @@ shows up as leftovers a later command would misread.")
       (= (Array.length (Pair.a &p)) 1))
     "decode-available: stops at a malformed value, keeping the earlier ones")
 
+  (assert-true test
+    (let-do [p (RESP.decode-available-bytes &(nul-bytes "$7\r\nab~cdef\r\n+OK\r\n")
+                                            0
+                                            2)]
+      (and (= (Array.length (Pair.a &p)) 2)
+           (and (= @(Pair.b &p) 18)
+                (= &(str (Array.unsafe-nth (Pair.a &p) 1)) "$2\r\nOK\r\n"))))
+    "decode-available-bytes: a NUL inside a bulk does not hide the value after it")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available-bytes
+               &(nul-bytes "*2\r\n$7\r\nab~cdef\r\n:5\r\n+OK\r\n")
+               0
+               2)]
+      (and (= (Array.length (Pair.a &p)) 2)
+           (and (= @(Pair.b &p) 26)
+                (and
+                  (match @(Array.unsafe-nth (Pair.a &p) 0)
+                    (RESP.Arr a) (= (Array.length &a) 2)
+                    _ false)
+                  (= &(str (Array.unsafe-nth (Pair.a &p) 1)) "$2\r\nOK\r\n")))))
+    "decode-available-bytes: a NUL inside an array element does not hide the value after it")
+
+  (assert-true test
+    (let [b (nul-bytes "$7\r\nab~c")]
+      (match (RESP.bulk-fill-target-bytes &b 0)
+        (Maybe.Just t) (= t 13)
+        (Maybe.Nothing) false))
+    "bulk-fill-target-bytes: a partial bulk with a NUL in it waits for its announced size")
+
+  (assert-true test
+    (let [b (nul-bytes "$7\r\nab~cdef\r\n")]
+      (Maybe.nothing? &(RESP.bulk-fill-target-bytes &b 0)))
+    "bulk-fill-target-bytes: a complete bulk with a NUL in it needs no more bytes")
+
+  (assert-true test
+    (Array.all?
+      &(fn [s]
+        (let [b (nul-bytes s)] (Maybe.just? &(RESP.fatal-error-at-bytes &b 0))))
+      &[@"~+OK\r\n" @"$1~\r\nx\r\n" @"*1~\r\n+OK\r\n" @":1~2\r\n"])
+    "fatal-error-at-bytes: a NUL where a type byte or a digit belongs fails at once")
+
   ; --- buffered read loop (Redis.read-n's decode + compact + append), driven
   ;     over scripted socket chunks so it is verifiable without a server ---
   (assert-true test
@@ -917,6 +999,20 @@ shows up as leftovers a later command would misread.")
                _ false)
              (= (Pair.b &p) "+OK\r\n"))))
     "buffered read: a reply coalesced after a large bulk decodes and is retained")
+
+  (assert-equal test
+    &[@"$2\r\nab\r\n" @"$4\r\nPONG\r\n"]
+    &(serve-reads &(nul-bytes "$7\r\nab~cdef\r\n+PONG\r\n") 2)
+    "socket read: a NUL inside a bulk reply leaves the next reply intact")
+
+  (assert-equal test
+    &[@"$4\r\nabcd\r\n" @"$4\r\nPONG\r\n"]
+    &(serve-reads
+      &(nul-bytes
+        &(String.concat
+          &[@"$20000\r\n" (String.repeat 4000 "abcd~") @"\r\n+PONG\r\n"]))
+      2)
+    "socket read: a large bulk reply full of NULs is read whole")
 
   (assert-equal test
     0

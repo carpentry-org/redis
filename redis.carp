@@ -104,6 +104,15 @@ malformed.")
           (Maybe.Nothing) (Maybe.Nothing)
           (Maybe.Just len) (Maybe.Just (Pair.init (+ idx 2) len))))))
 
+  (hidden parse-int)
+  (private parse-int)
+  ; reject a NUL, at which Int.from-string would stop early
+  (defn parse-int [s from to]
+    (let [digits (String.byte-slice s from to)]
+      (if (= (String.length &digits) (- to from))
+        (Int.from-string &digits)
+        (Maybe.Nothing))))
+
   (hidden decode-one-at)
   (private decode-one-at)
   ; decode the value at `pos` in a buffer of length `slen`. `slen` is threaded in
@@ -144,7 +153,7 @@ malformed.")
                   idx (find-cr-after s rest-start slen)]
               (if (= idx -1)
                 (bad-header s pos slen @"Malformed integer")
-                (match (Int.from-string &(String.byte-slice s rest-start idx))
+                (match (parse-int s rest-start idx)
                   (Maybe.Nothing) (fatal @"Could not parse integer in result.")
                   (Maybe.Just n)
                     (value-at-crlf s idx slen @"Malformed integer" (Integer n)))))
@@ -263,20 +272,11 @@ input is malformed or because a value is truncated mid-way.")
           (Pair.init @(Pair.a &p)
                      (String.byte-slice s @(Pair.b &p) (String.length s))))))
 
-  (doc decode-available "decodes up to `n` complete `RESP` values from `s`,
-starting at byte offset `start`.
-
-Returns a `Pair` of the decoded values and the byte offset just past the last
-one — where a streaming caller should resume once more bytes arrive. Decoding
-stops at the first incomplete or malformed value, so the array may hold fewer
-than `n` values and the offset then marks the start of the still-unconsumed
-tail. Unlike [`decode-first`](#decode-first) it consumes many values in a single
-left-to-right pass without re-slicing between them, which is what lets a
-buffered reader stay linear instead of quadratic.")
-  (defn decode-available [s start n]
+  (hidden decode-available-in)
+  (private decode-available-in)
+  (defn decode-available-in [s start n len]
     (let-do [results []
              cur start
-             len (String.length s)
              reading true]
       (while (and reading (< (Array.length &results) n))
         (if (>= cur len)
@@ -293,6 +293,25 @@ buffered reader stay linear instead of quadratic.")
                 (set! cur @(Pair.b &p)))))))
       (Pair.init results cur)))
 
+  (doc decode-available "decodes up to `n` complete `RESP` values from `s`,
+starting at byte offset `start`.
+
+Returns a `Pair` of the decoded values and the byte offset just past the last
+one — where a streaming caller should resume once more bytes arrive. Decoding
+stops at the first incomplete or malformed value, so the array may hold fewer
+than `n` values and the offset then marks the start of the still-unconsumed
+tail. Unlike [`decode-first`](#decode-first) it consumes many values in a single
+left-to-right pass without re-slicing between them, which is what lets a
+buffered reader stay linear instead of quadratic.")
+  (defn decode-available [s start n]
+    (decode-available-in s start n (String.length s)))
+
+  (doc decode-available-bytes
+    "[`decode-available`](#decode-available) over a byte buffer, so a NUL byte
+inside a value does not end the input.")
+  (defn decode-available-bytes [b start n]
+    (decode-available-in &(String.from-bytes b) start n (Array.length b)))
+
   (doc fatal-error-at
     "the decoder error for the value at `start` in `s`, if no amount of further
 input could ever make it decode; else `Nothing`.")
@@ -301,6 +320,11 @@ input could ever make it decode; else `Nothing`.")
       (Result.Error e)
         (if @(Pair.b &e) (Maybe.Just @(Pair.a &e)) (Maybe.Nothing))
       (Result.Success _) (Maybe.Nothing)))
+
+  (doc fatal-error-at-bytes
+    "[`fatal-error-at`](#fatal-error-at) over a whole byte buffer.")
+  (defn fatal-error-at-bytes [b start]
+    (fatal-error-at &(String.from-bytes b) start (Array.length b)))
 
   (doc bulk-fill-target
     "the buffer length the partial bulk string at `start` needs before it decodes, when its header has arrived but its payload has not; else `Nothing`.")
@@ -317,6 +341,11 @@ input could ever make it decode; else `Nothing`.")
               (> len (- Int.MAX (+ data-start 2))) (Maybe.Nothing)
               (let [target (+ data-start (+ len 2))]
                 (if (> target slen) (Maybe.Just target) (Maybe.Nothing))))))))
+
+  (doc bulk-fill-target-bytes
+    "[`bulk-fill-target`](#bulk-fill-target) over a whole byte buffer.")
+  (defn bulk-fill-target-bytes [b start]
+    (bulk-fill-target &(String.from-bytes b) start (Array.length b)))
 
   (definterface to-redis (Fn [a] RESP)))
 
@@ -342,7 +371,7 @@ multi-bulk wire string. Sub-commands in `cmd` are separated by spaces (e.g.
             (Array.copy-map &(fn [x] (Box.init @x)) args)])))))
 
 (deftype Redis [sock TcpStream
-                buf String])
+                buf (Array Byte)])
 
 (defmodule Redis
   (use-all Array Result)
@@ -350,7 +379,7 @@ multi-bulk wire string. Sub-commands in `cmd` are separated by spaces (e.g.
   (doc open-on "opens the connection to Redis on port `port`.")
   (defn open-on [host port]
     (match (TcpStream.connect host port)
-      (Result.Success s) (Success (init s @""))
+      (Result.Success s) (Success (init s []))
       (Result.Error e)
         (Error (fmt "Couldn’t connect to %s:%d: %s" host port &e))))
 
@@ -375,42 +404,35 @@ Fails as soon as the buffer holds a value that can never decode.")
              err @""
              reading true]
       (while-do (and reading (< (Array.length &results) (the Int n)))
-        (let-do [p (RESP.decode-available &acc
-                                          0
-                                          (- (the Int n) (Array.length &results)))]
+        (let-do [p (RESP.decode-available-bytes &acc
+                                                0
+                                                (- (the Int n)
+                                                   (Array.length &results)))]
           (for [i 0 (Array.length (Pair.a &p))]
             (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
           ; drop the consumed prefix so the next decode pass and any socket
           ; append work on the unconsumed tail only — this is what keeps a
           ; multi-value or pipelined read linear instead of quadratic
-          (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
+          (when (> @(Pair.b &p) 0) (set! acc (Array.suffix &acc @(Pair.b &p)))))
         (when (< (Array.length &results) (the Int n))
-          (match (RESP.fatal-error-at &acc 0 (String.length &acc))
+          (match (RESP.fatal-error-at-bytes &acc 0)
             (Maybe.Just e) (do (set! err e) (set! reading false))
             (Maybe.Nothing) ()))
         (when (and reading (< (Array.length &results) (the Int n)))
-          (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
-            (Maybe.Just target)
-              (let-do [bytes (String.to-bytes &acc)
-                       filling true]
-                (while-do (and filling (< (Array.length &bytes) target))
-                  (match (the (Result Int String)
-                              (TcpStream.read-append (sock r) &bytes))
-                    (Result.Error e)
-                      (do (set! err e) (set! reading false) (set! filling false))
-                    (Result.Success k)
-                      (when-do (= k 0)
-                        (set! err @"connection closed")
-                        (set! reading false)
-                        (set! filling false))))
-                (set! acc (String.from-bytes &bytes)))
-            (Maybe.Nothing)
-              (match (the (Result String String) (TcpStream.read (sock r)))
-                (Result.Error e) (do (set! err e) (set! reading false))
-                (Result.Success s)
-                  (if (String.empty? &s)
-                    (do (set! err @"connection closed") (set! reading false))
-                    (set! acc (String.concat &[acc s])))))))
+          (let-do [target (match (RESP.bulk-fill-target-bytes &acc 0)
+                     (Maybe.Just t) t
+                     (Maybe.Nothing) (Int.inc (Array.length &acc)))
+                   filling true]
+            (while-do (and filling (< (Array.length &acc) target))
+              (match (the (Result Int String)
+                          (TcpStream.read-append (sock r) &acc))
+                (Result.Error e)
+                  (do (set! err e) (set! reading false) (set! filling false))
+                (Result.Success k)
+                  (when-do (= k 0)
+                    (set! err @"connection closed")
+                    (set! reading false)
+                    (set! filling false)))))))
       (set-buf! r acc)
       (if (= (Array.length &results) (the Int n))
         (Result.Success results)
