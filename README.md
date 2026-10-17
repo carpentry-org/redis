@@ -52,6 +52,15 @@ The library provides thin wrappers around all standard Redis commands through
 The RESP type supports recursive arrays via `Box`, so nested structures
 (e.g. from `XRANGE` or `COMMAND`) are decoded faithfully.
 
+`RESP.Integer` carries a signed 64-bit `Long`. Use `l`-suffixed literals when
+constructing it, for example `(RESP.Integer 42l)`. Both `Int` and `Long`
+implement `to-redis`. Integer replies outside the signed 64-bit range are
+rejected. Pub/sub subscription counts remain `Int` and reject larger values.
+
+Socket reads retain their position within partial arrays and bulk strings.
+Each complete reply is decoded once, including when a large array spans many
+reads.
+
 ### Transactions
 
 `with-transaction` wraps commands in `MULTI`/`EXEC` and sends the whole thing in
