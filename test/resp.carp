@@ -52,30 +52,71 @@
 so the buffered read logic is testable without a server. Mirrors `read-n`'s
 length-aware fill for a split bulk. Returns the decoded values and the leftover.")
 (defn feed-n [chunks n]
-  (let-do [acc @""
+  (let-do [acc (the (Array Byte) [])
            results (the (Array RESP) [])
+           scan (RESP.ReadScan.init 0 -1 -1l [1] 0 0 (Maybe.Nothing))
            ci 0
            reading true]
     (while-do (and reading (< (Array.length &results) n))
-      (let-do [p (RESP.decode-available &acc 0 (- n (Array.length &results)))]
-        (for [i 0 (Array.length (Pair.a &p))]
-          (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
-        (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
-      (when (< (Array.length &results) n)
-        (match (RESP.fatal-error-at &acc 0 (String.length &acc))
-          (Maybe.Just _) (set! reading false)
-          (Maybe.Nothing) ()))
+      (RESP.scan-available &scan &acc (- n (Array.length &results)))
+      (when (> @(RESP.ReadScan.count &scan) 0)
+        (let-do [p (RESP.decode-available-bytes &acc
+                                                0
+                                                @(RESP.ReadScan.count &scan))]
+          (for [i 0 (Array.length (Pair.a &p))]
+            (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
+          (set! acc (Array.suffix &acc @(RESP.ReadScan.complete &scan)))))
+      (when (Maybe.just? (RESP.ReadScan.error &scan)) (set! reading false))
       (when (and reading (< (Array.length &results) n))
         (if (>= ci (Array.length chunks))
           (set! reading false)
-          (let [target (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
-                  (Maybe.Just t) t
-                  (Maybe.Nothing) (Int.inc (String.length &acc)))]
+          (let [target (if (>= @(RESP.ReadScan.bulk &scan) 0l)
+                  (- @(RESP.ReadScan.bulk &scan)
+                     (Long.from-int @(RESP.ReadScan.complete &scan)))
+                  (+ (Long.from-int (Array.length &acc)) 1l))]
             (while-do (and (< ci (Array.length chunks))
-                           (< (String.length &acc) target))
-              (set! acc (String.concat &[acc @(Array.unsafe-nth chunks ci)]))
+                           (< (Long.from-int (Array.length &acc)) target))
+              (set! acc
+                    (Array.concat
+                      &[acc (String.to-bytes (Array.unsafe-nth chunks ci))]))
               (set! ci (Int.inc ci)))))))
-    (Pair.init results acc)))
+    (Pair.init results (String.from-bytes &acc))))
+
+(doc nul-bytes "the bytes of `s` with every `~` turned into a NUL.")
+(defn nul-bytes [s]
+  (Array.endo-map &(fn [b] (if (= b 126b) 0b b)) (String.to-bytes s)))
+
+(defn show-reply [res]
+  (match res
+    (Result.Success v) (str &v)
+    (Result.Error e) (String.append "ERR " &e)))
+
+(doc serve-reads
+  "the first `n` `Redis.read` replies to `wire` served from a local listener,
+each re-encoded, or `ERR` and the error.")
+(defn serve-reads [wire n]
+  (let-do [out (the (Array String) [])]
+    (match (TcpListener.bind "127.0.0.1" 0)
+      (Result.Error e) (Array.push-back! &out e)
+      (Result.Success l)
+        (do
+          (match (Redis.open-on "127.0.0.1" (TcpListener.local-port &l))
+            (Result.Error e) (Array.push-back! &out e)
+            (Result.Success r)
+              (do
+                (match (TcpListener.accept &l)
+                  (Result.Error e) (Array.push-back! &out e)
+                  (Result.Success srv)
+                    (do
+                      (ignore (TcpStream.send-bytes &srv wire))
+                      (TcpStream.shutdown-write &srv)
+                      (TcpStream.set-read-timeout (Redis.sock &r) 5)
+                      (for [i 0 n]
+                        (Array.push-back! &out (show-reply (Redis.read &r))))
+                      (TcpStream.close srv)))
+                (Redis.close r)))
+          (TcpListener.close l)))
+    out))
 
 (doc prefix-counts
   "how many values every prefix of `s` decodes to, one digit per prefix length
@@ -171,7 +212,203 @@ shows up as leftovers a later command would misread.")
       @(QueueError.message (Array.unsafe-nth &es i))
     _ @""))
 
+(defn scan-prefixes-match? [bytes]
+  (let-do [scan (RESP.ReadScan.init 0 -1 -1l [1] 0 0 (Maybe.Nothing))
+           acc (the (Array Byte) [])
+           emitted 0
+           consumed 0
+           ok true]
+    (for [size 0 (Int.inc (Array.length bytes))]
+      (do
+        (when (> size 0)
+          (Array.push-back! &acc @(Array.unsafe-nth bytes (Int.dec size))))
+        (RESP.scan-available &scan &acc (- 9 emitted))
+        (set! emitted (+ emitted @(RESP.ReadScan.count &scan)))
+        (set! consumed (+ consumed @(RESP.ReadScan.complete &scan)))
+        (when (> @(RESP.ReadScan.complete &scan) 0)
+          (set! acc (Array.suffix &acc @(RESP.ReadScan.complete &scan))))
+        (let-do [prefix (Array.prefix bytes size)
+                 expected (RESP.decode-available-bytes &prefix 0 9)]
+          (unless (and
+              (= emitted (Array.length (Pair.a &expected)))
+              (= consumed @(Pair.b &expected)))
+            (set! ok false))
+          (when (< emitted 9)
+            (unless (=
+                (Maybe.just? (RESP.ReadScan.error &scan))
+                (Maybe.just?
+                  &(RESP.fatal-error-at-bytes &prefix @(Pair.b &expected))))
+              (set! ok false))))))
+    ok))
+
 (deftest test
+  (assert-true test
+    (Array.all?
+      &(fn [wire] (scan-prefixes-match? &(nul-bytes wire)))
+      &[@"+OK\r\n:1\r\n$-1\r\n"
+        @"*3\r\n*0\r\n*-1\r\n*1\r\n$3\r\nfoo\r\n+NEXT\r\n"
+        @"*2\r\n$7\r\nab~cdef\r\n:9223372036854775807\r\n"
+        @":-9223372036854775808\r\n:+0\r\n"
+        @":9223372036854775808\r\n"
+        @":abc\r\n"
+        @":\r\n"
+        @":+\r\n"
+        @": 1\r\n"
+        @"*x\r\n"
+        @"*\r\n"
+        @"*-2\r\n"
+        @"*2147483648\r\n"
+        @"$x\r\n"
+        @"$-2\r\n"
+        @"$2147483647\r\n"
+        @"*2\r\n:1\r\n:abc\r\n"
+        @"+OK\r\n*2\r\n$3\r\nfoo\r\n$5\r\ntrunc"
+        @"+OK\r\nX"
+        @"+OK\rX"
+        @"*0\rX"
+        @"$0\rX"
+        @"~+OK\r\n"])
+    "incremental framing matches stateless decoding at every byte boundary")
+
+  (assert-true test
+    (let-do [scan (RESP.ReadScan.init 0 -1 -1l [1] 0 0 (Maybe.Nothing))
+             bytes (String.to-bytes "*3\r\n:1\r\n")]
+      (RESP.scan-available &scan &bytes 1)
+      (and (= @(RESP.ReadScan.pos &scan) 8)
+           (and (= @(RESP.ReadScan.count &scan) 0)
+                (= (RESP.ReadScan.pending &scan) &[0 2]))))
+    "array scan retains completed elements before the array is complete")
+
+  (assert-true test
+    (let-do [scan (RESP.ReadScan.init 0 -1 -1l [1] 0 0 (Maybe.Nothing))
+             bytes (String.to-bytes "*3\r\n:1\r\n")]
+      (RESP.scan-available &scan &bytes 1)
+      (RESP.scan-available &scan &bytes 1)
+      (set! bytes (String.to-bytes "*3\r\n:1\r\n*2\r\n:2\r\n$3\r\nfo"))
+      (RESP.scan-available &scan &bytes 1)
+      (and (= @(RESP.ReadScan.pos &scan) 20)
+           (and (= @(RESP.ReadScan.bulk &scan) 25l)
+                (= (RESP.ReadScan.pending &scan) &[0 1 1]))))
+    "array scan resumes inside a nested bulk without recounting earlier elements")
+
+  (assert-true test
+    (let-do [scan (RESP.ReadScan.init 0 -1 -1l [1] 0 0 (Maybe.Nothing))
+             bytes (String.to-bytes "*3\r\n:1\r\n*2\r\n:2\r\n$3\r\nfo")]
+      (RESP.scan-available &scan &bytes 1)
+      (set! bytes
+            (String.to-bytes
+              "*3\r\n:1\r\n*2\r\n:2\r\n$3\r\nfoo\r\n:3\r\n+NEXT\r\n"))
+      (RESP.scan-available &scan &bytes 1)
+      (let-do [first @(RESP.ReadScan.complete &scan)]
+        (set! bytes (Array.suffix &bytes first))
+        (RESP.scan-available &scan &bytes 1)
+        (and (= first 29)
+             (and (= @(RESP.ReadScan.complete &scan) 7)
+                  (= @(RESP.ReadScan.count &scan) 1)))))
+    "array scan closes nested frames and resumes after buffer compaction")
+
+  (assert-true test
+    (let-do [scan (RESP.ReadScan.init 0 -1 -1l [1] 0 0 (Maybe.Nothing))]
+      (RESP.scan-available &scan &(String.to-bytes "*2\r\n:1\r\n:abc\r\n") 1)
+      (Maybe.just? (RESP.ReadScan.error &scan)))
+    "array scan rejects a malformed element before waiting for the rest")
+
+  (assert-true test
+    (let-do [scan (RESP.ReadScan.init 0 -1 -1l [1] 0 0 (Maybe.Nothing))]
+      (RESP.scan-available &scan
+                           &(String.to-bytes &(nest (Int.inc RESP.max-depth)))
+                           1)
+      (Maybe.just? (RESP.ReadScan.error &scan)))
+    "array scan enforces the existing nesting bound")
+
+  (assert-true test
+    (let-do [frame (String.concat
+               &[@"*100\r\n" (String.repeat 100 ":1\r\n") @"+NEXT\r\n"])
+             p (feed-n &(chunk-by &frame 1) 2)]
+      (and (= (Array.length (Pair.a &p)) 2)
+           (and (String.empty? (Pair.b &p))
+                (match-ref (Array.unsafe-nth (Pair.a &p) 0)
+                  (RESP.Arr a) (= (Array.length a) 100)
+                  _ false))))
+    "a large array split at every byte preserves the following reply")
+
+  (assert-equal test
+    &[@"*2\r\n$2\r\nab\r\n:9223372036854775807\r\n" @"$4\r\nPONG\r\n"]
+    &(serve-reads
+      &(nul-bytes "*2\r\n$7\r\nab~cdef\r\n:9223372036854775807\r\n+PONG\r\n")
+      2)
+    "socket array framing preserves NUL alignment and 64-bit elements")
+
+  (assert-equal test
+    &[@"ERR connection closed"]
+    &(serve-reads &(String.to-bytes "*2\r\n:1\r\n") 1)
+    "socket EOF inside an array returns an error instead of a partial value")
+
+  (assert-equal test
+    &[@"ERR Could not parse integer in result."]
+    &(serve-reads &(String.to-bytes "*2\r\n:1\r\n:abc\r\n") 1)
+    "socket array rejects malformed integers immediately")
+
+  (assert-equal test
+    ":2147483648\r\n"
+    &(str &(to-redis (+ (Long.from-int 2147483647) 1l)))
+    "Long values implement to-redis without narrowing")
+
+  (assert-true test
+    (match (RESP.from-string
+        "*3\r\n$9\r\nsubscribe\r\n$1\r\nx\r\n:2147483648\r\n")
+      (Result.Success reply) (pubsub-err? &reply)
+      _ false)
+    "pub/sub counts outside Int range are rejected instead of narrowed")
+
+  (assert-equal test
+    ":2147483648\r\n"
+    &(show-reply (RESP.from-string ":2147483648\r\n"))
+    "integer above signed 32-bit maximum survives decoding")
+
+  (assert-equal test
+    ":-2147483649\r\n"
+    &(show-reply (RESP.from-string ":-2147483649\r\n"))
+    "integer below signed 32-bit minimum survives decoding")
+
+  (assert-equal test
+    ":9223372036854775807\r\n"
+    &(show-reply (RESP.from-string ":9223372036854775807\r\n"))
+    "signed 64-bit maximum survives decoding and encoding")
+
+  (assert-equal test
+    ":-9223372036854775808\r\n"
+    &(show-reply (RESP.from-string ":-9223372036854775808\r\n"))
+    "signed 64-bit minimum survives decoding and encoding")
+
+  (assert-equal test
+    ":9223372036854775807\r\n"
+    &(show-reply (RESP.from-string ":+9223372036854775807\r\n"))
+    "integer permits the protocol's explicit plus sign")
+
+  (assert-true test
+    (decode-err? ":9223372036854775808\r\n")
+    "integer above signed 64-bit maximum is rejected")
+
+  (assert-true test
+    (decode-err? ":-9223372036854775809\r\n")
+    "integer below signed 64-bit minimum is rejected")
+
+  (assert-true test
+    (decode-err? ": 1\r\n")
+    "integer rejects whitespace before its digits")
+
+  (assert-true test
+    (decode-err? ":+\r\n")
+    "integer requires a digit after its sign")
+
+  (assert-equal test
+    &[@":9223372036854775807\r\n" @":-9223372036854775808\r\n"]
+    &(serve-reads
+      &(String.to-bytes ":9223372036854775807\r\n:-9223372036854775808\r\n")
+      2)
+    "socket reads preserve both signed 64-bit boundaries")
+
   (assert-equal test "$-1\r\n" &(str &(RESP.Null)) "encode Null")
 
   (assert-equal test "$5\r\nhello\r\n" &(str &(RESP.Str @"hello")) "encode Str")
@@ -190,18 +427,18 @@ shows up as leftovers a later command would misread.")
 
   (assert-equal test "-\r\n" &(str &(RESP.Err @"")) "encode empty Err")
 
-  (assert-equal test ":42\r\n" &(str &(RESP.Integer 42)) "encode Integer 42")
+  (assert-equal test ":42\r\n" &(str &(RESP.Integer 42l)) "encode Integer 42")
 
-  (assert-equal test ":0\r\n" &(str &(RESP.Integer 0)) "encode Integer 0")
+  (assert-equal test ":0\r\n" &(str &(RESP.Integer 0l)) "encode Integer 0")
 
   (assert-equal test
     ":-1\r\n"
-    &(str &(RESP.Integer -1))
+    &(str &(RESP.Integer -1l))
     "encode negative Integer")
 
   (assert-equal test
     ":1000000\r\n"
-    &(str &(RESP.Integer 1000000))
+    &(str &(RESP.Integer 1000000l))
     "encode large Integer")
 
   (assert-equal test
@@ -225,7 +462,7 @@ shows up as leftovers a later command would misread.")
     &(str
       &(RESP.Arr
         [(Box.init (RESP.Str @"hi"))
-         (Box.init (RESP.Integer 42))
+         (Box.init (RESP.Integer 42l))
          (Box.init (RESP.Null))]))
     "encode mixed-type Arr")
 
@@ -234,7 +471,7 @@ shows up as leftovers a later command would misread.")
     &(str
       &(RESP.Arr
         [(Box.init
-           (RESP.Arr [(Box.init (RESP.Integer 1)) (Box.init (RESP.Integer 2))]))]))
+           (RESP.Arr [(Box.init (RESP.Integer 1l)) (Box.init (RESP.Integer 2l))]))]))
     "encode nested Arr")
 
   (assert-equal test
@@ -292,25 +529,25 @@ shows up as leftovers a later command would misread.")
 
   (assert-true test
     (match (RESP.from-string ":42\r\n")
-      (Result.Success r) (match r (RESP.Integer i) (= i 42) _ false)
+      (Result.Success r) (match r (RESP.Integer i) (= i 42l) _ false)
       _ false)
     "decode integer 42")
 
   (assert-true test
     (match (RESP.from-string ":0\r\n")
-      (Result.Success r) (match r (RESP.Integer i) (= i 0) _ false)
+      (Result.Success r) (match r (RESP.Integer i) (= i 0l) _ false)
       _ false)
     "decode integer 0")
 
   (assert-true test
     (match (RESP.from-string ":-1\r\n")
-      (Result.Success r) (match r (RESP.Integer i) (= i -1) _ false)
+      (Result.Success r) (match r (RESP.Integer i) (= i -1l) _ false)
       _ false)
     "decode negative integer")
 
   (assert-true test
     (match (RESP.from-string ":1000000\r\n")
-      (Result.Success r) (match r (RESP.Integer i) (= i 1000000) _ false)
+      (Result.Success r) (match r (RESP.Integer i) (= i 1000000l) _ false)
       _ false)
     "decode large integer")
 
@@ -351,7 +588,7 @@ shows up as leftovers a later command would misread.")
   (assert-true test
     (let [encoded (str
             &(RESP.Arr
-              [(Box.init (RESP.Str @"héllo")) (Box.init (RESP.Integer 7))]))]
+              [(Box.init (RESP.Str @"héllo")) (Box.init (RESP.Integer 7l))]))]
       (match (RESP.from-string &encoded)
         (Result.Success r)
           (match r
@@ -362,7 +599,7 @@ shows up as leftovers a later command would misread.")
                        (RESP.Str s) (= &s "héllo")
                        _ false)
                      (match @(Box.peek (Array.unsafe-nth &a 1))
-                       (RESP.Integer i) (= i 7)
+                       (RESP.Integer i) (= i 7l)
                        _ false)))
             _ false)
         _ false))
@@ -413,7 +650,7 @@ shows up as leftovers a later command would misread.")
           (RESP.Arr a)
             (and (= (Array.length &a) 3)
                  (match @(Box.peek (Array.unsafe-nth &a 1))
-                   (RESP.Integer i) (= i 2)
+                   (RESP.Integer i) (= i 2l)
                    _ false))
           _ false)
       _ false)
@@ -431,7 +668,7 @@ shows up as leftovers a later command would misread.")
                      _ false)
                    (and
                      (match @(Box.peek (Array.unsafe-nth &a 1))
-                       (RESP.Integer i) (= i 42)
+                       (RESP.Integer i) (= i 42l)
                        _ false)
                      (match @(Box.peek (Array.unsafe-nth &a 2))
                        (RESP.Null) true
@@ -467,7 +704,7 @@ shows up as leftovers a later command would misread.")
                 (match @(Box.peek (Array.unsafe-nth &l2 0))
                   (RESP.Arr l3)
                     (match @(Box.peek (Array.unsafe-nth &l3 0))
-                      (RESP.Integer i) (= i 99)
+                      (RESP.Integer i) (= i 99l)
                       _ false)
                   _ false)
               _ false)
@@ -581,12 +818,12 @@ shows up as leftovers a later command would misread.")
 
   (assert-equal test
     ":42\r\n"
-    &(roundtrip &(RESP.Integer 42))
+    &(roundtrip &(RESP.Integer 42l))
     "Integer roundtrip")
 
   (assert-equal test
     ":-1\r\n"
-    &(roundtrip &(RESP.Integer -1))
+    &(roundtrip &(RESP.Integer -1l))
     "negative Integer roundtrip")
 
   (assert-equal test
@@ -605,7 +842,7 @@ shows up as leftovers a later command would misread.")
     &(roundtrip
       &(RESP.Arr
         [(Box.init (RESP.Str @"hi"))
-         (Box.init (RESP.Integer 42))
+         (Box.init (RESP.Integer 42l))
          (Box.init (RESP.Null))]))
     "mixed Arr roundtrip")
 
@@ -614,7 +851,7 @@ shows up as leftovers a later command would misread.")
     &(roundtrip
       &(RESP.Arr
         [(Box.init
-           (RESP.Arr [(Box.init (RESP.Integer 1)) (Box.init (RESP.Integer 2))]))]))
+           (RESP.Arr [(Box.init (RESP.Integer 1l)) (Box.init (RESP.Integer 2l))]))]))
     "nested Arr roundtrip")
 
   (assert-equal test
@@ -635,7 +872,7 @@ shows up as leftovers a later command would misread.")
       (and (= (Array.length &r) 2)
            (and
              (match @(Array.unsafe-nth &r 0) (RESP.Str s) (= &s "OK") _ false)
-             (match @(Array.unsafe-nth &r 1) (RESP.Integer i) (= i 42) _ false))))
+             (match @(Array.unsafe-nth &r 1) (RESP.Integer i) (= i 42l) _ false))))
     "decode-n: two values")
 
   (assert-true test
@@ -811,7 +1048,7 @@ shows up as leftovers a later command would misread.")
     (let-do [p (RESP.decode-available "+OK\r\n:42\r\n" 5 1)]
       (and (= (Array.length (Pair.a &p)) 1)
            (match @(Array.unsafe-nth (Pair.a &p) 0)
-             (RESP.Integer i) (= i 42)
+             (RESP.Integer i) (= i 42l)
              _ false)
            (= @(Pair.b &p) 10)))
     "decode-available: decodes starting from a byte offset")
@@ -840,6 +1077,48 @@ shows up as leftovers a later command would misread.")
     (let-do [p (RESP.decode-available "+OK\r\n$-2\r\nxx\r\n" 0 5)]
       (= (Array.length (Pair.a &p)) 1))
     "decode-available: stops at a malformed value, keeping the earlier ones")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available-bytes &(nul-bytes "$7\r\nab~cdef\r\n+OK\r\n")
+                                            0
+                                            2)]
+      (and (= (Array.length (Pair.a &p)) 2)
+           (and (= @(Pair.b &p) 18)
+                (= &(str (Array.unsafe-nth (Pair.a &p) 1)) "$2\r\nOK\r\n"))))
+    "decode-available-bytes: a NUL inside a bulk does not hide the value after it")
+
+  (assert-true test
+    (let-do [p (RESP.decode-available-bytes
+               &(nul-bytes "*2\r\n$7\r\nab~cdef\r\n:5\r\n+OK\r\n")
+               0
+               2)]
+      (and (= (Array.length (Pair.a &p)) 2)
+           (and (= @(Pair.b &p) 26)
+                (and
+                  (match @(Array.unsafe-nth (Pair.a &p) 0)
+                    (RESP.Arr a) (= (Array.length &a) 2)
+                    _ false)
+                  (= &(str (Array.unsafe-nth (Pair.a &p) 1)) "$2\r\nOK\r\n")))))
+    "decode-available-bytes: a NUL inside an array element does not hide the value after it")
+
+  (assert-true test
+    (let [b (nul-bytes "$7\r\nab~c")]
+      (match (RESP.bulk-fill-target-bytes &b 0)
+        (Maybe.Just t) (= t 13)
+        (Maybe.Nothing) false))
+    "bulk-fill-target-bytes: a partial bulk with a NUL in it waits for its announced size")
+
+  (assert-true test
+    (let [b (nul-bytes "$7\r\nab~cdef\r\n")]
+      (Maybe.nothing? &(RESP.bulk-fill-target-bytes &b 0)))
+    "bulk-fill-target-bytes: a complete bulk with a NUL in it needs no more bytes")
+
+  (assert-true test
+    (Array.all?
+      &(fn [s]
+        (let [b (nul-bytes s)] (Maybe.just? &(RESP.fatal-error-at-bytes &b 0))))
+      &[@"~+OK\r\n" @"$1~\r\nx\r\n" @"*1~\r\n+OK\r\n" @":1~2\r\n"])
+    "fatal-error-at-bytes: a NUL where a type byte or a digit belongs fails at once")
 
   ; --- buffered read loop (Redis.read-n's decode + compact + append), driven
   ;     over scripted socket chunks so it is verifiable without a server ---
@@ -917,6 +1196,20 @@ shows up as leftovers a later command would misread.")
                _ false)
              (= (Pair.b &p) "+OK\r\n"))))
     "buffered read: a reply coalesced after a large bulk decodes and is retained")
+
+  (assert-equal test
+    &[@"$2\r\nab\r\n" @"$4\r\nPONG\r\n"]
+    &(serve-reads &(nul-bytes "$7\r\nab~cdef\r\n+PONG\r\n") 2)
+    "socket read: a NUL inside a bulk reply leaves the next reply intact")
+
+  (assert-equal test
+    &[@"$4\r\nabcd\r\n" @"$4\r\nPONG\r\n"]
+    &(serve-reads
+      &(nul-bytes
+        &(String.concat
+          &[@"$20000\r\n" (String.repeat 4000 "abcd~") @"\r\n+PONG\r\n"]))
+      2)
+    "socket read: a large bulk reply full of NULs is read whole")
 
   (assert-equal test
     0
@@ -1025,7 +1318,7 @@ shows up as leftovers a later command would misread.")
         &(RESP.Arr
           [(Box.init (RESP.Str @"subscribe"))
            (Box.init (RESP.Str @"news"))
-           (Box.init (RESP.Integer 1))]))
+           (Box.init (RESP.Integer 1l))]))
       (Result.Success m)
         (match m
           (PubSubMessage.Subscribe channel count)
@@ -1039,7 +1332,7 @@ shows up as leftovers a later command would misread.")
         &(RESP.Arr
           [(Box.init (RESP.Str @"unsubscribe"))
            (Box.init (RESP.Str @"news"))
-           (Box.init (RESP.Integer 0))]))
+           (Box.init (RESP.Integer 0l))]))
       (Result.Success m)
         (match m
           (PubSubMessage.Unsubscribe channel count)
@@ -1053,7 +1346,7 @@ shows up as leftovers a later command would misread.")
         &(RESP.Arr
           [(Box.init (RESP.Str @"psubscribe"))
            (Box.init (RESP.Str @"news.*"))
-           (Box.init (RESP.Integer 2))]))
+           (Box.init (RESP.Integer 2l))]))
       (Result.Success m)
         (match m
           (PubSubMessage.PSubscribe pattern count)
@@ -1067,7 +1360,7 @@ shows up as leftovers a later command would misread.")
         &(RESP.Arr
           [(Box.init (RESP.Str @"punsubscribe"))
            (Box.init (RESP.Str @"news.*"))
-           (Box.init (RESP.Integer 0))]))
+           (Box.init (RESP.Integer 0l))]))
       (Result.Success m)
         (match m
           (PubSubMessage.PUnsubscribe pattern count)
@@ -1108,7 +1401,7 @@ shows up as leftovers a later command would misread.")
 
   (assert-true test
     (pubsub-err?
-      &(RESP.Arr [(Box.init (RESP.Integer 1)) (Box.init (RESP.Str @"news"))]))
+      &(RESP.Arr [(Box.init (RESP.Integer 1l)) (Box.init (RESP.Str @"news"))]))
     "reject pub/sub reply whose kind is not a bulk string")
 
   (assert-true test
@@ -1124,7 +1417,7 @@ shows up as leftovers a later command would misread.")
       &(RESP.Arr
         [(Box.init (RESP.Str @"message"))
          (Box.init (RESP.Str @"news"))
-         (Box.init (RESP.Integer 42))]))
+         (Box.init (RESP.Integer 42l))]))
     "reject message with non-string payload")
 
   ; --- streaming: decode-first reports the unconsumed remainder ---
@@ -1152,7 +1445,7 @@ shows up as leftovers a later command would misread.")
             (Result.Error _) @"")]
       (match (RESP.decode-first &rest)
         (Result.Success p2)
-          (match @(Pair.a &p2) (RESP.Integer i) (= i 42) _ false)
+          (match @(Pair.a &p2) (RESP.Integer i) (= i 42l) _ false)
         (Result.Error _) false))
     "decode-first: the remainder decodes to the next value")
 
@@ -1181,7 +1474,7 @@ shows up as leftovers a later command would misread.")
         &(RESP.Arr
           [(Box.init (RESP.Str @"unsubscribe"))
            (Box.init (RESP.Null))
-           (Box.init (RESP.Integer 0))]))
+           (Box.init (RESP.Integer 0l))]))
       (Result.Success m)
         (match m
           (PubSubMessage.Unsubscribe channel count)
@@ -1195,7 +1488,7 @@ shows up as leftovers a later command would misread.")
         &(RESP.Arr
           [(Box.init (RESP.Str @"punsubscribe"))
            (Box.init (RESP.Null))
-           (Box.init (RESP.Integer 0))]))
+           (Box.init (RESP.Integer 0l))]))
       (Result.Success m)
         (match m
           (PubSubMessage.PUnsubscribe pattern count)

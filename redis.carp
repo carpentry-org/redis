@@ -5,7 +5,7 @@
   (Null [])
   (Str [String])
   (Err [String])
-  (Integer [Int])
+  (Integer [Long])
   (Arr [(Array (Box RESP))]))
 
 (defmodule RESP
@@ -16,7 +16,7 @@
       (Null) @"$-1\r\n"
       (Str s) (fmt "$%d\r\n%s\r\n" (String.length &s) &s)
       (Err s) (fmt "-%s\r\n" &s)
-      (Integer i) (fmt ":%d\r\n" i)
+      (Integer i) (String.concat &[@":" (Long.str i) @"\r\n"])
       (Arr a)
         (let-do [parts [(fmt "*%d\r\n" (Array.length &a))]]
           (for [i 0 (Array.length &a)]
@@ -104,6 +104,29 @@ malformed.")
           (Maybe.Nothing) (Maybe.Nothing)
           (Maybe.Just len) (Maybe.Just (Pair.init (+ idx 2) len))))))
 
+  (hidden parse-int)
+  (private parse-int)
+  ; Strict signed int64 parsing, independent of the host C long width.
+  (defn parse-int [s from to]
+    (let-do [neg (and (< from to) (= (String.char-at s from) \-))
+             signed (and (< from to) (or neg (= (String.char-at s from) \+)))
+             i (if signed (Int.inc from) from)
+             ; Accumulate negatively so the signed minimum is representable.
+             ; Avoid both C long limits and host-sized compiler literals.
+             half (Long.bit-shift-left 1l 62l)
+             maximum (+ half (Long.dec half))
+             limit (if neg (- (Long.neg maximum) 1l) (Long.neg maximum))
+             acc 0l
+             ok (< i to)]
+      (while-do (and ok (< i to))
+        (let [d (Char.meaning &(String.char-at s i))]
+          (if (or (< d 0) (< acc (/ (+ limit (Long.from-int d)) 10l)))
+            (set! ok false)
+            (do
+              (set! acc (- (* acc 10l) (Long.from-int d)))
+              (set! i (Int.inc i))))))
+      (if ok (Maybe.Just (if neg acc (Long.neg acc))) (Maybe.Nothing))))
+
   (hidden decode-one-at)
   (private decode-one-at)
   ; decode the value at `pos` in a buffer of length `slen`. `slen` is threaded in
@@ -137,14 +160,13 @@ malformed.")
                                @"Malformed error string"
                                (Err (String.byte-slice s rest-start idx)))))
             \:
-            ; search from rest-start, not pos: unlike +/-, an empty integer
-            ; (":\r\n") has no round-trip to preserve and must stay malformed —
-            ; Int.from-string "" is (Just 0), which would silently decode as 0
+            ; Unlike +/-, an integer needs at least one digit. An empty
+            ; header remains incomplete until its CR has a following byte.
             (let [rest-start (+ pos 1)
                   idx (find-cr-after s rest-start slen)]
               (if (= idx -1)
                 (bad-header s pos slen @"Malformed integer")
-                (match (Int.from-string &(String.byte-slice s rest-start idx))
+                (match (parse-int s rest-start idx)
                   (Maybe.Nothing) (fatal @"Could not parse integer in result.")
                   (Maybe.Just n)
                     (value-at-crlf s idx slen @"Malformed integer" (Integer n)))))
@@ -263,20 +285,11 @@ input is malformed or because a value is truncated mid-way.")
           (Pair.init @(Pair.a &p)
                      (String.byte-slice s @(Pair.b &p) (String.length s))))))
 
-  (doc decode-available "decodes up to `n` complete `RESP` values from `s`,
-starting at byte offset `start`.
-
-Returns a `Pair` of the decoded values and the byte offset just past the last
-one — where a streaming caller should resume once more bytes arrive. Decoding
-stops at the first incomplete or malformed value, so the array may hold fewer
-than `n` values and the offset then marks the start of the still-unconsumed
-tail. Unlike [`decode-first`](#decode-first) it consumes many values in a single
-left-to-right pass without re-slicing between them, which is what lets a
-buffered reader stay linear instead of quadratic.")
-  (defn decode-available [s start n]
+  (hidden decode-available-in)
+  (private decode-available-in)
+  (defn decode-available-in [s start n len]
     (let-do [results []
              cur start
-             len (String.length s)
              reading true]
       (while (and reading (< (Array.length &results) n))
         (if (>= cur len)
@@ -293,6 +306,25 @@ buffered reader stay linear instead of quadratic.")
                 (set! cur @(Pair.b &p)))))))
       (Pair.init results cur)))
 
+  (doc decode-available "decodes up to `n` complete `RESP` values from `s`,
+starting at byte offset `start`.
+
+Returns a `Pair` of the decoded values and the byte offset just past the last
+one — where a streaming caller should resume once more bytes arrive. Decoding
+stops at the first incomplete or malformed value, so the array may hold fewer
+than `n` values and the offset then marks the start of the still-unconsumed
+tail. Unlike [`decode-first`](#decode-first) it consumes many values in a single
+left-to-right pass without re-slicing between them, which is what lets a
+buffered reader stay linear instead of quadratic.")
+  (defn decode-available [s start n]
+    (decode-available-in s start n (String.length s)))
+
+  (doc decode-available-bytes
+    "[`decode-available`](#decode-available) over a byte buffer, so a NUL byte
+inside a value does not end the input.")
+  (defn decode-available-bytes [b start n]
+    (decode-available-in &(String.from-bytes b) start n (Array.length b)))
+
   (doc fatal-error-at
     "the decoder error for the value at `start` in `s`, if no amount of further
 input could ever make it decode; else `Nothing`.")
@@ -301,6 +333,11 @@ input could ever make it decode; else `Nothing`.")
       (Result.Error e)
         (if @(Pair.b &e) (Maybe.Just @(Pair.a &e)) (Maybe.Nothing))
       (Result.Success _) (Maybe.Nothing)))
+
+  (doc fatal-error-at-bytes
+    "[`fatal-error-at`](#fatal-error-at) over a whole byte buffer.")
+  (defn fatal-error-at-bytes [b start]
+    (fatal-error-at &(String.from-bytes b) start (Array.length b)))
 
   (doc bulk-fill-target
     "the buffer length the partial bulk string at `start` needs before it decodes, when its header has arrived but its payload has not; else `Nothing`.")
@@ -318,6 +355,144 @@ input could ever make it decode; else `Nothing`.")
               (let [target (+ data-start (+ len 2))]
                 (if (> target slen) (Maybe.Just target) (Maybe.Nothing))))))))
 
+  (doc bulk-fill-target-bytes
+    "[`bulk-fill-target`](#bulk-fill-target) over a whole byte buffer.")
+  (defn bulk-fill-target-bytes [b start]
+    (bulk-fill-target &(String.from-bytes b) start (Array.length b)))
+
+  ; Internal framing state shared by the socket reader and chunked tests.
+  ; `complete` is the prefix the caller drops before the next scan. Array
+  ; counts and the scan position survive reads; values are decoded only once.
+  (hidden ReadScan)
+  (deftype ReadScan
+    [pos Int
+     line Int
+     bulk Long
+     pending (Array Int)
+     complete Int
+     count Int
+     error (Maybe String)])
+
+  (hidden scan-fail!)
+  (private scan-fail!)
+  (defn scan-fail! [scan message]
+    (ReadScan.set-error! scan (Maybe.Just message)))
+
+  (hidden scan-complete!)
+  (private scan-complete!)
+  (defn scan-complete! [scan after]
+    (let-do [pending (ReadScan.pending scan)
+             last (Int.dec (Array.length pending))]
+      (ReadScan.set-pos! scan after)
+      (ReadScan.set-line! scan -1)
+      (ReadScan.set-bulk! scan -1l)
+      (Array.aset! pending last (Int.dec @(Array.unsafe-nth pending last)))
+      (while-do (and (not (Array.empty? pending))
+                     (= @(Array.unsafe-last pending) 0))
+        (ignore (Array.pop-back! pending)))
+      (when-do (Array.empty? pending)
+        (ReadScan.set-count! scan (Int.inc @(ReadScan.count scan)))
+        (ReadScan.set-complete! scan after)
+        (Array.push-back! pending 1))))
+
+  (hidden scan-header!)
+  (private scan-header!)
+  (defn scan-header! [scan bytes kind terminated]
+    (let [from (Int.inc @(ReadScan.pos scan))
+          end @(ReadScan.line scan)
+          after (+ end 2)]
+      (cond
+        (or (= kind 43b) (= kind 45b))
+        (when terminated (scan-complete! scan after))
+        ; Bulk lengths require CRLF before validation. Integer/array headers
+        ; with a digit can already be invalid when only their CR has arrived.
+        (and (not terminated) (or (= kind 36b) (= from end)))
+        ()
+        (let [header (String.from-bytes &(Array.slice bytes from end))
+              length (- end from)]
+          (if (= kind 58b)
+            (match (parse-int &header 0 length)
+              (Maybe.Just _) (when terminated (scan-complete! scan after))
+              _ (scan-fail! scan @"Could not parse integer in result."))
+            (match (parse-len &header 0 length)
+              (Maybe.Nothing) (scan-fail! scan @"Malformed RESP length")
+              (Maybe.Just n)
+                (cond
+                  (= n -1) (when terminated (scan-complete! scan after))
+                  (< n 0) (scan-fail! scan @"Malformed RESP length: negative")
+                  (= kind 36b)
+                    (do
+                      (ReadScan.set-pos! scan after)
+                      (ReadScan.set-line! scan -1)
+                      ; Keep the target wide even when a declared bulk cannot
+                      ; fit in the current Int-indexed byte buffer.
+                      (ReadScan.set-bulk! scan
+                                          (+ (Long.from-int after)
+                                             (+ (Long.from-int n) 2l))))
+                  (> (Array.length (ReadScan.pending scan)) max-depth)
+                    (scan-fail! scan
+                                (fmt "RESP array nests deeper than %d levels"
+                                     max-depth))
+                  (not terminated) ()
+                  (= n 0) (scan-complete! scan after)
+                  (let-do [pending (ReadScan.pending scan)
+                           last (Int.dec (Array.length pending))]
+                    (Array.aset! pending
+                                 last
+                                 (Int.dec @(Array.unsafe-nth pending last)))
+                    (Array.push-back! pending n)
+                    (ReadScan.set-pos! scan after)
+                    (ReadScan.set-line! scan -1)))))))))
+
+  (hidden scan-available)
+  (defn scan-available [scan bytes n]
+    (let-do [dropped @(ReadScan.complete scan)
+             length (Array.length bytes)
+             running true]
+      (when-do (> dropped 0)
+        (ReadScan.set-pos! scan (- @(ReadScan.pos scan) dropped))
+        (when (>= @(ReadScan.line scan) 0)
+          (ReadScan.set-line! scan (- @(ReadScan.line scan) dropped)))
+        (when (>= @(ReadScan.bulk scan) 0l)
+          (ReadScan.set-bulk! scan
+                              (- @(ReadScan.bulk scan) (Long.from-int dropped))))
+        (ReadScan.set-complete! scan 0)
+        (ReadScan.set-count! scan 0))
+      (while-do (and running
+                     (and (< @(ReadScan.count scan) n)
+                          (Maybe.nothing? (ReadScan.error scan))))
+        (cond
+          (>= @(ReadScan.bulk scan) 0l)
+            (if (>= (Long.from-int length) @(ReadScan.bulk scan))
+              (scan-complete! scan (Long.to-int @(ReadScan.bulk scan)))
+              (set! running false))
+          (>= @(ReadScan.pos scan) length) (set! running false)
+          (let [kind @(Array.unsafe-nth bytes @(ReadScan.pos scan))]
+            (if (not
+                (or (= kind 43b)
+                    (or (= kind 45b)
+                        (or (= kind 58b) (or (= kind 36b) (= kind 42b))))))
+              (scan-fail! scan @"Malformed RESP data: unknown type byte")
+              (do
+                (when (< @(ReadScan.line scan) 0)
+                  (ReadScan.set-line! scan (Int.inc @(ReadScan.pos scan))))
+                (while-do (and (< @(ReadScan.line scan) length)
+                               (/=
+                                 @(Array.unsafe-nth bytes @(ReadScan.line scan))
+                                 13b))
+                  (ReadScan.set-line! scan (Int.inc @(ReadScan.line scan))))
+                (cond
+                  (>= @(ReadScan.line scan) length) (set! running false)
+                  (= @(ReadScan.line scan) (Int.dec length))
+                    (do
+                      (scan-header! scan bytes kind false)
+                      (set! running false))
+                  (/=
+                    @(Array.unsafe-nth bytes (Int.inc @(ReadScan.line scan)))
+                    10b)
+                    (scan-fail! scan @"Malformed RESP header: expected CRLF")
+                  (scan-header! scan bytes kind true)))))))))
+
   (definterface to-redis (Fn [a] RESP)))
 
 (defmodule String
@@ -325,8 +500,12 @@ input could ever make it decode; else `Nothing`.")
   (implements to-redis String.to-redis))
 
 (defmodule Int
-  (defn to-redis [s] (RESP.Integer s))
+  (defn to-redis [s] (RESP.Integer (Long.from-int s)))
   (implements to-redis Int.to-redis))
+
+(defmodule Long
+  (defn to-redis [s] (RESP.Integer s))
+  (implements to-redis Long.to-redis))
 
 (defmodule RESP
   (doc encode-command
@@ -342,7 +521,7 @@ multi-bulk wire string. Sub-commands in `cmd` are separated by spaces (e.g.
             (Array.copy-map &(fn [x] (Box.init @x)) args)])))))
 
 (deftype Redis [sock TcpStream
-                buf String])
+                buf (Array Byte)])
 
 (defmodule Redis
   (use-all Array Result)
@@ -350,7 +529,7 @@ multi-bulk wire string. Sub-commands in `cmd` are separated by spaces (e.g.
   (doc open-on "opens the connection to Redis on port `port`.")
   (defn open-on [host port]
     (match (TcpStream.connect host port)
-      (Result.Success s) (Success (init s @""))
+      (Result.Success s) (Success (init s []))
       (Result.Error e)
         (Error (fmt "Couldn’t connect to %s:%d: %s" host port &e))))
 
@@ -368,49 +547,50 @@ socket only when it does not yet hold `n` complete values. Any bytes past the
 `n`th value — a following reply that arrived in the same read — are stored back
 on the connection so a later read can consume them instead of losing them.
 
+Array counts, header scan positions and bulk targets survive socket reads.
+The value decoder runs after framing completes or detects malformed input.
+
 Fails as soon as the buffer holds a value that can never decode.")
   (defn read-n [r n]
     (let-do [acc @(buf r)
              results (the (Array RESP) [])
+             scan (RESP.ReadScan.init 0 -1 -1l [1] 0 0 (Maybe.Nothing))
              err @""
              reading true]
       (while-do (and reading (< (Array.length &results) (the Int n)))
-        (let-do [p (RESP.decode-available &acc
-                                          0
-                                          (- (the Int n) (Array.length &results)))]
-          (for [i 0 (Array.length (Pair.a &p))]
-            (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
-          ; drop the consumed prefix so the next decode pass and any socket
-          ; append work on the unconsumed tail only — this is what keeps a
-          ; multi-value or pipelined read linear instead of quadratic
-          (set! acc (String.byte-slice &acc @(Pair.b &p) (String.length &acc))))
+        (RESP.scan-available &scan &acc (- (the Int n) (Array.length &results)))
+        (when (> @(RESP.ReadScan.count &scan) 0)
+          (let-do [p (RESP.decode-available-bytes &acc
+                                                  0
+                                                  @(RESP.ReadScan.count &scan))]
+            (for [i 0 (Array.length (Pair.a &p))]
+              (Array.push-back! &results @(Array.unsafe-nth (Pair.a &p) i)))
+            (set! acc (Array.suffix &acc @(RESP.ReadScan.complete &scan)))))
         (when (< (Array.length &results) (the Int n))
-          (match (RESP.fatal-error-at &acc 0 (String.length &acc))
-            (Maybe.Just e) (do (set! err e) (set! reading false))
-            (Maybe.Nothing) ()))
+          (match-ref (RESP.ReadScan.error &scan)
+            (Maybe.Just e)
+              (do
+                ; Decode the failed reply once to preserve the public error text.
+                (set! err (Maybe.from (RESP.fatal-error-at-bytes &acc 0) @e))
+                (set! reading false))
+            _ ()))
         (when (and reading (< (Array.length &results) (the Int n)))
-          (match (RESP.bulk-fill-target &acc 0 (String.length &acc))
-            (Maybe.Just target)
-              (let-do [bytes (String.to-bytes &acc)
-                       filling true]
-                (while-do (and filling (< (Array.length &bytes) target))
-                  (match (the (Result Int String)
-                              (TcpStream.read-append (sock r) &bytes))
-                    (Result.Error e)
-                      (do (set! err e) (set! reading false) (set! filling false))
-                    (Result.Success k)
-                      (when-do (= k 0)
-                        (set! err @"connection closed")
-                        (set! reading false)
-                        (set! filling false))))
-                (set! acc (String.from-bytes &bytes)))
-            (Maybe.Nothing)
-              (match (the (Result String String) (TcpStream.read (sock r)))
-                (Result.Error e) (do (set! err e) (set! reading false))
-                (Result.Success s)
-                  (if (String.empty? &s)
-                    (do (set! err @"connection closed") (set! reading false))
-                    (set! acc (String.concat &[acc s])))))))
+          (let-do [target (if (>= @(RESP.ReadScan.bulk &scan) 0l)
+                     (- @(RESP.ReadScan.bulk &scan)
+                        (Long.from-int @(RESP.ReadScan.complete &scan)))
+                     (+ (Long.from-int (Array.length &acc)) 1l))
+                   filling true]
+            (while-do (and filling
+                           (< (Long.from-int (Array.length &acc)) target))
+              (match (the (Result Int String)
+                          (TcpStream.read-append (sock r) &acc))
+                (Result.Error e)
+                  (do (set! err e) (set! reading false) (set! filling false))
+                (Result.Success k)
+                  (when-do (= k 0)
+                    (set! err @"connection closed")
+                    (set! reading false)
+                    (set! filling false)))))))
       (set-buf! r acc)
       (if (= (Array.length &results) (the Int n))
         (Result.Success results)
@@ -459,7 +639,10 @@ Returns `(Result () String)`, propagating any socket errors.")
   (private int-at)
   (defn int-at [a i]
     (match-ref (Box.peek (Array.unsafe-nth a i))
-      (RESP.Integer n) (Result.Success @n)
+      (RESP.Integer n)
+        (if (and (>= @n (Long.from-int Int.MIN)) (<= @n (Long.from-int Int.MAX)))
+          (Result.Success (Long.to-int @n))
+          (Result.Error @"pub/sub count is outside the Int range"))
       _ (Result.Error @"expected an integer field in pub/sub reply")))
 
   (hidden name-at)
@@ -1163,12 +1346,12 @@ nested arrays.
 ```
 ; decoding
 (RESP.from-string \"+OK\\r\\n\")       ; => (Success (Str @\"OK\"))
-(RESP.from-string \":42\\r\\n\")       ; => (Success (Integer 42))
+(RESP.from-string \":42\\r\\n\")       ; => (Success (Integer 42l))
 (RESP.from-string \"$-1\\r\\n\")       ; => (Success (Null))
 
 ; encoding
 (str &(RESP.Str @\"hi\"))             ; => \"$2\\r\\nhi\\r\\n\"
-(str &(RESP.Integer 42))            ; => \":42\\r\\n\"
+(str &(RESP.Integer 42l))            ; => \":42\\r\\n\"
 
 ; pattern matching on responses
 (match (Redis.get &r @\"key\")
