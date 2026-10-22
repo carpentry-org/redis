@@ -780,31 +780,30 @@ is closed. That terminating error is returned to the caller.")
     (cons (list 'to-redis (car args)) (rconv- (cdr args)))))
 
 (defmacro defredis [cmd :rest args]
-  (eval
-    (list 'defmodule
-          'Redis
-          (list 'doc
-                cmd
-                (String.concat
-                  ["is a wrapper around the `"
-                   (rtreat- (Symbol.str cmd))
-                   "` Redis command.
+  (list 'defmodule
+        'Redis
+        (list 'doc
+              cmd
+              (String.concat
+                ["is a wrapper around the `"
+                 (rtreat- (Symbol.str cmd))
+                 "` Redis command.
 
 It takes the same arguments as the [Redis command](https://redis.io/commands/"
-                   (Symbol.str cmd)
-                   ")."]))
-          (list 'defn
-                cmd
-                (collect-into (cons 'r args) array)
-                (list 'match
-                      (list 'Redis.send
-                            'r
-                            (list 'copy (rtreat- (Symbol.str cmd)))
-                            (list 'ref (rconv- args)))
-                      '(Result.Error e)
-                      '(Result.Error e)
-                      '(Result.Success _)
-                      '(Redis.read r))))))
+                 (Symbol.str cmd)
+                 ")."]))
+        (list 'defn
+              cmd
+              (collect-into (cons 'r args) array)
+              (list 'match
+                    (list 'Redis.send
+                          'r
+                          (list 'copy (rtreat- (Symbol.str cmd)))
+                          (list 'ref (rconv- args)))
+                    '(Result.Error e)
+                    '(Result.Error e)
+                    '(Result.Success _)
+                    '(Redis.read r)))))
 
 (defredis append key value)
 (defredis auth password)
