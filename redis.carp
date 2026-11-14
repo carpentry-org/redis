@@ -255,15 +255,16 @@ array has fewer than `n` elements, the string did not contain enough
 complete RESP data.")
   (defn decode-n [s n]
     (let-do [results []
-             pos 0]
-      (for [i 0 n]
+             pos 0
+             reading true]
+      (while (and reading (< (Array.length &results) n))
         (if (>= pos (String.length s))
-          (break)
+          (set! reading false)
           (match (decode-one s pos)
-            (Result.Error _e) (break)
+            (Result.Error _e) (set! reading false)
             (Result.Success p)
               (if (<= @(Pair.b &p) pos)
-                (break)
+                (set! reading false)
                 (do
                   (Array.push-back! &results @(Pair.a &p))
                   (set! pos @(Pair.b &p)))))))
