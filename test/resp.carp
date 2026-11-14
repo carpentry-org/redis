@@ -907,6 +907,22 @@ shows up as leftovers a later command would misread.")
     (let [r (RESP.decode-n "+OK\r\n+trun" 2)] (= (Array.length &r) 1))
     "decode-n: truncated second value returns only complete values")
 
+  (assert-true test
+    (let [r (RESP.decode-n "+OK\r\n:42\r\n$5\r\nhel" 3)]
+      (and (= (Array.length &r) 2)
+           (and
+             (match @(Array.unsafe-nth &r 0) (RESP.Str s) (= &s "OK") _ false)
+             (match @(Array.unsafe-nth &r 1) (RESP.Integer i) (= i 42l) _ false))))
+    "decode-n: an incomplete tail keeps the values before it")
+
+  (assert-true test
+    (let [r (RESP.decode-n "+OK\r\n:42\r\n$-2\r\nxx\r\n+PONG\r\n" 5)]
+      (and (= (Array.length &r) 2)
+           (and
+             (match @(Array.unsafe-nth &r 0) (RESP.Str s) (= &s "OK") _ false)
+             (match @(Array.unsafe-nth &r 1) (RESP.Integer i) (= i 42l) _ false))))
+    "decode-n: a malformed value stops decoding, keeping the values before it")
+
   ; A bulk string whose declared length exceeds the bytes present must not be
   ; sliced past the buffer. decode-one reports it incomplete (0 results) so
   ; Redis.read keeps accumulating instead of reading out of bounds.
